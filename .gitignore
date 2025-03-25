@@ -1,0 +1,43 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Python bytecode
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# PyTorch model files
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+*.h5
+*.hdf5
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db 

@@ -1,0 +1,42 @@
+[project]
+name = "veil"
+version = "0.1.0"
+description = "A command line tool"
+authors = []
+dependencies = [
+    "click>=8.1.0",
+    "ultralytics>=8.0.0",
+    "djitellopy>=2.5.0",
+    "opencv-python>=4.8.0",
+    "vidgear>=0.3.0",
+    "pygame>=2.5.0",
+    "omegaconf>=2.3.0",
+    "cython==3.0.11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ipython>=8.0.0",
+    "pdbpp>=0.10.0",
+    "black>=23.0.0",
+    "pylint>=2.17.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+veil = "veil.cli:cli"
+
+[tool.black]
+line-length = 120
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.messages_control]
+disable = [
+    "C0330",  # wrong-hanging-indentation (conflicts with black)
+    "C0326",  # bad-whitespace (conflicts with black)
+] 

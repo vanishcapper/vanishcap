@@ -1,0 +1,18 @@
+video:
+  source: "video.mp4"
+  events: "run"
+
+detector:
+  model: "yolov5s"
+  frame_skip: 10
+  events: 
+    - "video": "frame"
+
+navigator: 
+  events: 
+    - "detector": "human"
+
+ui:
+  events:
+    - "video": "frame"
+    - "detector": "human"

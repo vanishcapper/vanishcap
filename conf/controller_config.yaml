@@ -1,0 +1,19 @@
+# Controller configuration with multiple workers
+video:
+  source: video.mp4
+  events: run  # Video worker handles its own event loop
+
+detector:
+  model: yolov5s.pt
+  frame_skip: 10
+  events:
+    - video: frame  # Receive frame events from video
+
+navigator:
+  events:
+    - detector: detection  # Receive detection events from detector
+
+ui:
+  events:
+    - video: frame        # Receive frame events from video
+    - detector: detection  # Receive detection events from detector
