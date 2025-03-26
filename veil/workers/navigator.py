@@ -1,96 +1,72 @@
-"""Navigator worker for handling navigation based on detections."""
+"""Worker for processing detections and emitting navigation commands."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+import queue
 
 from veil.event import Event
 from veil.worker import Worker
 
 
 class Navigator(Worker):
-    """Worker that handles navigation based on object detections."""
+    """Worker that processes detections and emits navigation commands."""
 
-    def __init__(self, config: Dict[str, Any] = None) -> None:
+    def __init__(self, config: Dict[str, Any]) -> None:
         """Initialize the navigator worker.
 
         Args:
-            config: Optional dictionary of configuration values
+            config: Configuration dictionary containing:
+                - target_class: Class ID to track
+                - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
         super().__init__("navigator", config)
-        self.target_class = 0  # 0 is person in COCO dataset
+        self.target_class = config["target_class"]
+        self.logger.info(f"Initialized navigator worker with target class: {self.target_class}")
+        
+        # Initialize state
+        self.detection_queue = queue.Queue()
 
-    def __call__(self, event: Event) -> Event:
-        """Handle detection events and determine navigation actions.
-
-        Args:
-            event: The event to handle
-
-        Returns:
-            Event: A response event containing navigation commands
-        """
-        if event.event_name == "detection":
-            detections = event.data["detections"]
-            frame_number = event.data["frame_number"]
+    def _task(self) -> None:
+        """Run one iteration of the navigator loop."""
+        # Get detections from queue
+        try:
+            detections = self.detection_queue.get_nowait()
+        except queue.Empty:
+            return
             
-            # Find humans in the frame
-            humans = [d for d in detections if d["class"] == self.target_class]
+        # Process detections
+        target_detections = [
+            d for d in detections
+            if d["class_name"] == self.target_class
+        ]
+        
+        if target_detections:
+            # Get the largest target (closest to camera)
+            target = max(target_detections, key=lambda d: (d["bbox"][2] - d["bbox"][0]) * (d["bbox"][3] - d["bbox"][1]))
             
-            if not humans:
-                return Event(self.name, "no_target", {
-                    "frame_number": frame_number,
-                    "action": "search",
-                })
-            
-            # Get the largest human detection
-            largest_human = max(humans, key=lambda x: self._bbox_area(x["bbox"]))
-            
-            # Calculate center of detection
-            bbox = largest_human["bbox"]
+            # Calculate target position
+            bbox = target["bbox"]
             center_x = (bbox[0] + bbox[2]) / 2
             center_y = (bbox[1] + bbox[3]) / 2
             
-            # Determine action based on position
-            action = self._determine_action(center_x, center_y)
-            
-            return Event(self.name, "command", {
-                "frame_number": frame_number,
-                "action": action,
-                "target_position": {
-                    "x": center_x,
-                    "y": center_y,
-                },
-            })
-        
-        return Event(self.name, "error", f"Unknown event: {event.event_name}")
+            # Emit navigation event
+            self._emit(Event(self.name, "navigation", {
+                "x": center_x,
+                "y": center_y,
+                "confidence": target["confidence"]
+            }))
 
-    def _bbox_area(self, bbox: List[float]) -> float:
-        """Calculate the area of a bounding box.
+    def __call__(self, event: Event) -> None:
+        """Handle incoming events.
 
         Args:
-            bbox: List of [x1, y1, x2, y2] coordinates
-
-        Returns:
-            float: Area of the bounding box
+            event: Event to handle
         """
-        return (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
-
-    def _determine_action(self, center_x: float, center_y: float) -> str:
-        """Determine navigation action based on target position.
-
-        Args:
-            center_x: X coordinate of target center
-            center_y: Y coordinate of target center
-
-        Returns:
-            str: Navigation action to take
-        """
-        # Simple logic based on target position in frame
-        if center_x < 0.3:
-            return "move_left"
-        elif center_x > 0.7:
-            return "move_right"
-        elif center_y < 0.3:
-            return "move_forward"
-        elif center_y > 0.7:
-            return "move_backward"
+        if event.event_name == "detection":
+            self.detection_queue.put(event.data)
         else:
-            return "hover" 
+            self.logger.debug(f"Received unknown event: {event.event_name}")
+
+    def _finish(self) -> None:
+        """Clean up navigator resources."""
+        # Nothing to clean up for navigator
+        pass 

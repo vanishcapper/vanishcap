@@ -1,146 +1,146 @@
-"""UI worker for displaying frames and detections using pygame."""
+"""Worker for displaying video frames and detection results."""
 
-import pygame
+import traceback
 from typing import Any, Dict, List, Optional, Tuple
-
+import queue
+import time
 import cv2
-import numpy as np
+import pygame
+import pygame.display
+import pygame.event
+import pygame.image
+import pygame.time
 
 from veil.event import Event
 from veil.worker import Worker
 
 
-class UI(Worker):
-    """Worker that displays frames and detections using pygame."""
+class Ui(Worker):
+    """Worker that displays video frames and detection results."""
 
-    def __init__(self, name: str, config: Dict[str, Any] = None) -> None:
+    def __init__(self, config: Dict[str, Any]) -> None:
         """Initialize the UI worker.
 
         Args:
-            name: The name of this worker instance
-            config: Optional dictionary of configuration values
+            config: Configuration dictionary containing:
+                - window_size: Optional tuple of (width, height) for the display window
+                - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                - fps: Optional target frame rate (default: 30)
         """
-        super().__init__(name, config)
-        self.window_size = self.config.get("window_size", (800, 600))
-        self.display = None
-        self.clock = None
-        self.font = None
-        self.running = False
+        super().__init__("ui", config)
+        self.window_size = config.get("window_size", (800, 600))
+        self.target_fps = config.get("fps", 30)
+        self.frame_time = 1.0 / self.target_fps
+        self.last_frame_time = 0
+        self.logger.info(f"Initialized UI worker with window size: {self.window_size} and target FPS: {self.target_fps}")
+        
+        # Initialize pygame modules
+        try:
+            pygame.display.init()
+            pygame.font.init()
+            self.screen = pygame.display.set_mode(self.window_size)
+            pygame.display.set_caption("Veil UI")
+            self.logger.info("Pygame modules initialized")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize pygame modules: {e}")
+            traceback.print_exc()
+            raise
+        
+        # Initialize state
+        self.current_frame = None
+        self.current_detections = []
 
-    def __call__(self, event: Event) -> Event:
-        """Handle events and update the display.
+    def _task(self) -> None:
+        """Run one iteration of the UI loop."""
+        # Handle pygame events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                print(f"DEBUG: UI worker received ESC/QUIT event")
+                self.logger.info("Received quit event")
+                # Emit stop event to notify controller
+                print(f"DEBUG: UI worker emitting stop event")
+                self._emit(Event(self.name, "stop", None))
+                # Set stop flag to stop UI loop
+                print(f"DEBUG: UI worker setting stop flag")
+                self._stop_event.set()
+                # Close pygame window
+                print(f"DEBUG: UI worker closing pygame window")
+                pygame.display.quit()
+                # Process any pending events before returning
+                if self._event_queue is not None:
+                    try:
+                        event = self._event_queue.get_nowait()
+                        self(event)
+                    except queue.Empty:
+                        pass
+                return
+        
+        # Update display if we have a frame and enough time has passed
+        if self.current_frame is not None:
+            current_time = time.time()
+            if (current_time - self.last_frame_time) >= self.frame_time:
+                # Convert frame to RGB for pygame
+                frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+                
+                # Convert to pygame surface
+                frame_surface = pygame.surfarray.make_surface(frame_rgb.swapaxes(0, 1))
+                
+                # Scale frame to window size
+                frame_surface = pygame.transform.scale(frame_surface, self.window_size)
+                
+                # Draw frame
+                self.screen.blit(frame_surface, (0, 0))
+                
+                # Draw detections if any
+                if self.current_detections:
+                    for detection in self.current_detections:
+                        bbox = detection["bbox"]
+                        
+                        # Get frame dimensions for scaling
+                        frame_height, frame_width = self.current_frame.shape[:2]
+                        
+                        # Scale bbox to window size
+                        x1, y1, x2, y2 = [
+                            int(bbox[0] * self.window_size[0] / frame_width),
+                            int(bbox[1] * self.window_size[1] / frame_height),
+                            int(bbox[2] * self.window_size[0] / frame_width),
+                            int(bbox[3] * self.window_size[1] / frame_height)
+                        ]
+                        
+                        # Draw bounding box
+                        pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
+                        
+                        # Draw label
+                        label = f"{detection['class_name']} ({detection['confidence']:.2f})"
+                        font = pygame.font.Font(None, 24)
+                        text = font.render(label, True, (0, 255, 0))
+                        self.screen.blit(text, (x1, y1-20))
+                
+                # Update display
+                pygame.display.flip()
+                self.last_frame_time = current_time
+
+    def __call__(self, event: Event) -> None:
+        """Handle incoming events.
 
         Args:
-            event: The event to handle
-
-        Returns:
-            Event: A response event indicating display status
+            event: Event to handle
         """
-        if event.event_name == "start":
-            if not self.running:
-                pygame.init()
-                self.display = pygame.display.set_mode(self.window_size)
-                pygame.display.set_caption("Veil Detection Display")
-                self.clock = pygame.time.Clock()
-                self.font = pygame.font.Font(None, 36)
-                self.running = True
-            return Event(self.name, "ready", None)
-
-        elif event.event_name == "frame":
-            if not self.running:
-                return Event(self.name, "error", "Display not initialized")
-
-            # Handle pygame events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                    return Event(self.name, "quit", None)
-
-            # Convert frame to pygame surface
-            frame = event.data["frame"]
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
-            frame = cv2.resize(frame, self.window_size)
-            surface = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
-
-            # Draw frame
-            self.display.blit(surface, (0, 0))
-
-            # Draw frame number
-            frame_text = self.font.render(f"Frame: {event.data['frame_number']}", True, (255, 255, 255))
-            self.display.blit(frame_text, (10, 10))
-
-            pygame.display.flip()
-            self.clock.tick(30)  # Limit to 30 FPS
-
-            return Event(self.name, "displayed", None)
-
+        if event.event_name == "frame":
+            self.current_frame = event.data
+            self.logger.debug(f"Received frame event")
         elif event.event_name == "detection":
-            if not self.running:
-                return Event(self.name, "error", "Display not initialized")
-
-            # Get the frame from the event data
-            frame = event.data.get("frame")
-            if frame is None:
-                return Event(self.name, "error", "No frame data in detection event")
-
-            # Convert frame to pygame surface
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, self.window_size)
-            surface = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
-
-            # Draw frame
-            self.display.blit(surface, (0, 0))
-
-            # Draw detections
-            for detection in event.data["detections"]:
-                bbox = detection["bbox"]
-                # Scale bbox to window size
-                bbox = self._scale_bbox(bbox, frame.shape[:2], self.window_size)
-                # Draw rectangle
-                pygame.draw.rect(
-                    self.display,
-                    (0, 255, 0),  # Green color for boxes
-                    bbox,
-                    2,
-                )
-                # Draw class and confidence
-                text = f"{detection['class']}: {detection['confidence']:.2f}"
-                text_surface = self.font.render(text, True, (255, 255, 255))
-                self.display.blit(text_surface, (bbox[0], bbox[1] - 25))
-
-            # Draw frame number
-            frame_text = self.font.render(f"Frame: {event.data['frame_number']}", True, (255, 255, 255))
-            self.display.blit(frame_text, (10, 10))
-
-            pygame.display.flip()
-            self.clock.tick(30)
-
-            return Event(self.name, "displayed", None)
-
+            self.current_detections = event.data
+            self.logger.debug(f"Received detection event with {len(event.data)} detections")
         elif event.event_name == "stop":
-            if self.running:
-                pygame.quit()
-                self.running = False
-            return Event(self.name, "stopped", None)
+            self.logger.info("Received stop event")
+            self._stop_event.set()
+            pygame.display.quit()
+        else:
+            self.logger.debug(f"Received unknown event: {event.event_name}")
 
-        return Event(self.name, "error", f"Unknown event: {event.event_name}")
-
-    def _scale_bbox(self, bbox: List[float], src_size: Tuple[int, int], dst_size: Tuple[int, int]) -> Tuple[int, int, int, int]:
-        """Scale bounding box coordinates to match display size.
-
-        Args:
-            bbox: Original bounding box [x1, y1, x2, y2]
-            src_size: Original image size (height, width)
-            dst_size: Target display size (width, height)
-
-        Returns:
-            Tuple[int, int, int, int]: Scaled bounding box coordinates
-        """
-        scale_x = dst_size[0] / src_size[1]
-        scale_y = dst_size[1] / src_size[0]
-        return (
-            int(bbox[0] * scale_x),
-            int(bbox[1] * scale_y),
-            int(bbox[2] * scale_x),
-            int(bbox[3] * scale_y),
-        ) 
+    def _finish(self) -> None:
+        """Clean up pygame resources."""
+        pygame.font.quit()
+        pygame.display.quit()
+        self.logger.info("Pygame modules stopped") 

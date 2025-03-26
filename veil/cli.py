@@ -1,10 +1,13 @@
 """Command line interface for veil."""
 
 import click
+import signal
+import traceback
 from pathlib import Path
 
 from veil.controller import Controller
 from veil.event import Event
+from veil.utils.logging import get_worker_logger
 
 
 @click.group(invoke_without_command=True)
@@ -15,8 +18,32 @@ def cli(config: str):
     Args:
         config: Path to the YAML configuration file
     """
-    # Create the controller with the config file
-    controller = Controller(config)
+    logger = get_worker_logger("cli", "INFO")
     
-    # Start the video worker
-    controller(Event("video", "run", None)) 
+    def signal_handler(signum, frame):
+        logger.info("Received shutdown signal, stopping...")
+        if controller is not None:
+            controller.stop()
+    
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    controller = None
+    try:
+        # Create and start the controller
+        controller = Controller(config)
+        controller.start()
+        
+        # Wait for signal
+        signal.pause()
+            
+    except Exception as e:
+        logger.error(f"Error in main loop: {e}")
+        logger.error("Stack trace:")
+        logger.error(traceback.format_exc())
+        raise
+    finally:
+        logger.info("Main loop stopped")
+        if controller is not None:
+            controller.stop()

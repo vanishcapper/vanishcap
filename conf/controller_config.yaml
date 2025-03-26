@@ -1,19 +1,23 @@
 # Controller configuration with multiple workers
 video:
-  source: video.mp4
-  events: run  # Video worker handles its own event loop
+  source: 0
+  log_level: INFO
 
 detector:
-  model: yolov5s.pt
-  frame_skip: 10
+  model: yolov5su.pt
+  frame_skip: 30
+  log_level: INFO
   events:
     - video: frame  # Receive frame events from video
 
 navigator:
+  target_class: 0  # Track humans (class ID 0)
+  log_level: INFO
   events:
     - detector: detection  # Receive detection events from detector
 
 ui:
+  log_level: INFO
   events:
     - video: frame        # Receive frame events from video
     - detector: detection  # Receive detection events from detector

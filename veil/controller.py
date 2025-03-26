@@ -1,127 +1,194 @@
-"""Controller class for managing workers and their configurations."""
+"""Controller for managing worker threads and event routing."""
 
+import importlib
 import inspect
 from pathlib import Path
-from typing import Dict, Type, TypeVar
+from typing import Any, Dict, List, Optional, Set
 
 from omegaconf import OmegaConf
-
 from veil.event import Event
 from veil.worker import Worker
-
-T = TypeVar("T", bound=Worker)
+from veil.workers.ui import Ui
+from veil.utils.logging import get_worker_logger
 
 
 class Controller:
-    """Controller class that manages workers and their configurations."""
+    """Controller for managing worker threads and event routing."""
 
     def __init__(self, config_path: str) -> None:
-        """Initialize the controller with a config file.
+        """Initialize the controller.
 
         Args:
-            config_path: Path to the YAML configuration file
+            config_path: Path to the configuration file
 
         Raises:
             FileNotFoundError: If the config file doesn't exist
-            ValueError: If a config key doesn't match a worker class name
+            ValueError: If the config is invalid
         """
-        self.workers: Dict[str, Worker] = {}
-        self.event_routes: Dict[str, Dict[str, str]] = {}  # Maps event names to {target_worker: event_name}
-        self._load_config(config_path)
-
-    def _load_config(self, config_path: str) -> None:
-        """Load configuration and create workers.
-
-        Args:
-            config_path: Path to the YAML configuration file
-
-        Raises:
-            FileNotFoundError: If the config file doesn't exist
-            ValueError: If a config key doesn't match a worker class name
-        """
-        path = Path(config_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_path}")
-
-        conf = OmegaConf.load(path)
-        config = OmegaConf.to_container(conf, resolve=True)
-        # Import workers module and get all worker classes
-        from veil import workers
+        self.logger = get_worker_logger("controller", "INFO") 
+        self.logger.info(f"Initializing controller with config: {config_path}")
         
-        worker_classes = {
-            name: cls for name, cls in inspect.getmembers(workers)
-            if (inspect.isclass(cls) and 
-                issubclass(cls, Worker) and 
-                cls != Worker)  # Exclude the base Worker class
-        }
+        self.config = self._load_config(config_path)
+        self.workers: Dict[str, Worker] = {}
+        self.event_routes: Dict[str, Set[str]] = {}
+        
+        # Initialize workers
+        self._init_workers()
+        
+        # Build event routing map
+        self._build_event_routes()
+        
+        self.logger.info("Controller initialized")
 
-        # First pass: create all workers
-        for name, worker_config in config.items():
-            # Find worker class name case-insensitively
-            worker_class_name = next(
-                (key for key in worker_classes.keys() if key.lower() == name.lower()),
-                None
-            )
-            
-            if worker_class_name is None:
-                raise ValueError(
-                    f"Config key '{name}' doesn't match any worker class. "
-                    f"Available workers: {', '.join(worker_classes.keys())}"
-                )
-            
-            worker_type = worker_classes[worker_class_name]
-            self.workers[name] = worker_type(worker_config)
-
-        # Second pass: build event routing map
-        for name, worker_config in config.items():
-            if "events" in worker_config:
-                events = worker_config["events"]
-                # Skip if events is just "run" - this means the worker handles its own event loop
-                if events == "run":
-                    continue
-                
-                # Handle list of event routes
-                if isinstance(events, list):
-                    for route in events:
-                        if not isinstance(route, dict):
-                            raise ValueError(f"Invalid event route: {route}")
-                        for source_worker, event_name in route.items():
-                            if source_worker not in self.workers:
-                                raise ValueError(
-                                    f"Event route from worker '{source_worker}' targets non-existent worker '{name}'"
-                                )
-                            if event_name not in self.event_routes:
-                                self.event_routes[event_name] = {}
-                            self.event_routes[event_name][name] = event_name
-
-    def __call__(self, event: Event) -> Event:
-        """Handle an event by passing it to the appropriate worker.
+    def _load_config(self, config_path: str) -> Dict[str, Any]:
+        """Load configuration from file.
 
         Args:
-            event: The event to handle
+            config_path: Path to the configuration file
 
         Returns:
-            Event: The response event from the worker
+            Dict containing the configuration
 
         Raises:
-            KeyError: If no worker is found for the event's worker_name
+            FileNotFoundError: If the config file doesn't exist
+            ValueError: If the config is invalid
         """
-        if event.worker_name not in self.workers:
-            raise KeyError(f"No worker found for name: {event.worker_name}")
+        config_path = Path(config_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+            
+        try:
+            config = OmegaConf.load(config_path)
+            return OmegaConf.to_container(config)
+        except Exception as e:
+            raise ValueError(f"Failed to load config: {e}")
+
+    def _init_workers(self) -> None:
+        """Initialize all workers from config."""
+        # Import the workers module
+        worker_module = importlib.import_module("veil.workers")
         
-        # Get response from the worker
-        response = self.workers[event.worker_name](event)
+        # Get all worker classes from the module
+        worker_classes = {
+            name.lower(): cls for name, cls in inspect.getmembers(worker_module)
+            if inspect.isclass(cls) and issubclass(cls, Worker) and cls != Worker
+        }
         
-        # Route the response event if there are any routes defined
-        if response.event_name in self.event_routes:
-            # Create events for all target workers
-            for target_worker, event_name in self.event_routes[response.event_name].items():
-                target_event = Event(
-                    target_worker,
-                    event_name,
-                    response.data
+        for worker_type, worker_config in self.config.items():
+            worker_type_lower = worker_type.lower()
+            if worker_type_lower not in worker_classes:
+                available = ", ".join(sorted(worker_classes.keys()))
+                raise ValueError(
+                    f"Unknown worker type '{worker_type}'. Available workers: {available}"
                 )
-                # Recursively handle the event
-                self(target_event)
+                
+            worker_class = worker_classes[worker_type_lower]
+            # Initialize the worker
+            self.workers[worker_type] = worker_class(worker_config)
+
+    def _build_event_routes(self) -> None:
+        """Build the event routing map from config.
         
-        return response 
+        Each worker in the config has an "events" list containing "worker_name": "event_name" pairs
+        that specify which events from which workers it wants to receive.
+        """
+        # Don't add stop events to routing - they're handled directly
+        for worker_name, worker_config in self.config.items():
+            worker_lower = worker_name.lower()
+            if worker_lower not in self.workers:
+                raise ValueError(f"Unknown worker: {worker_name}")
+                
+            # Skip routes that are just "run"
+            if isinstance(worker_config, str) and worker_config == "run":
+                continue
+                
+            # Get the events list for this worker
+            events = worker_config.get("events", [])
+            if not isinstance(events, list):
+                raise ValueError(f"Invalid events list for {worker_name}: {events}")
+                
+            # Add routes for each event this worker wants to receive
+            for event_spec in events:
+                if not isinstance(event_spec, dict):
+                    raise ValueError(f"Invalid event spec for {worker_name}: {event_spec}")
+                    
+                # Each event spec should have a single key:value pair
+                if len(event_spec) != 1:
+                    raise ValueError(f"Event spec for {worker_name} should have exactly one key:value pair: {event_spec}")
+                    
+                source_worker, event_name = next(iter(event_spec.items()))
+                source_worker_lower = source_worker.lower()
+                
+                # Validate source worker exists
+                if source_worker_lower not in self.workers:
+                    raise ValueError(f"Unknown source worker in event spec for {worker_name}: {source_worker}")
+                    
+                # Add the route
+                if event_name not in self.event_routes:
+                    self.event_routes[event_name] = set()
+                self.event_routes[event_name].add(worker_lower)
+
+    def start(self) -> None:
+        """Start all workers."""
+        # Find UI worker if it exists
+        ui_worker = None
+        for name, worker in self.workers.items():
+            if isinstance(worker, Ui):
+                ui_worker = (name, worker)
+                break
+                
+        # Start non-UI workers first
+        for name, worker in self.workers.items():
+            if not isinstance(worker, Ui):
+                self.logger.debug(f"Starting worker: {name}")
+                worker.start(self)
+                
+        # Start UI worker in main thread if it exists
+        if ui_worker is not None:
+            name, worker = ui_worker
+            self.logger.debug(f"Starting UI worker: {name}")
+            worker.start(self, run_in_main_thread=True)
+
+    def stop(self) -> None:
+        """Stop all workers."""
+        self.logger.debug("Stopping all workers")
+        for name, worker in self.workers.items():
+            self.logger.debug(f"Stopping worker: {name}")
+            worker.stop()
+        self.logger.debug("All workers stopped")
+
+    def __call__(self, event: Event) -> None:
+        """Handle an event by routing it to appropriate workers.
+
+        Args:
+            event: Event to handle
+        """
+        self.logger.debug(f"Controller received event: {event.event_name} from {event.worker_name}")
+        
+        # Handle stop event from any worker by stopping all workers
+        if event.event_name == "stop":
+            self.logger.debug(f"Controller received stop event from {event.worker_name}, stopping all workers")
+            self.stop()
+            return
+            
+        # Get target workers for this event type
+        targets = self.event_routes.get(event.event_name, set())
+        self.logger.debug(f"Routing event {event.event_name} to targets: {targets}")
+        
+        # Route event to each target worker
+        for target in targets:
+            target_lower = target.lower()
+            if target_lower in self.workers:
+                self.logger.debug(f"Controller routing event to worker: {target}")
+                self.workers[target]._dispatch(event)
+            else:
+                self.logger.warning(f"Unknown target worker: {target}")
+
+    def __enter__(self) -> "Controller":
+        """Context manager entry."""
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit."""
+        self.stop() 
