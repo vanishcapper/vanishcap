@@ -24,17 +24,17 @@ class Detector(Worker):
         super().__init__("detector", config)
         self.model_path = config["model"]
         self.frame_skip = config.get("frame_skip", 1)  # Default to 1 frame
-        self.logger.info(f"Initialized detector worker with model: {self.model_path}")
+        self.logger.warning(f"Initialized detector worker with model: {self.model_path}")
 
         # Initialize YOLO model
         self.model = YOLO(self.model_path)
-        self.logger.info("Successfully loaded YOLO model")
+        self.logger.warning("Successfully loaded YOLO model")
 
         # Warm up model with blank image
-        self.logger.info("Warming up model with blank image...")
+        self.logger.warning("Warming up model with blank image...")
         blank_image = np.zeros((640, 640, 3), dtype=np.uint8)  # Standard YOLO input size
-        _ = self.model(blank_image)
-        self.logger.info("Model warmup complete")
+        _ = self.model(blank_image, verbose=False)
+        self.logger.warning("Model warmup complete")
 
         # Initialize state
         self.frame_count = 0
@@ -68,8 +68,8 @@ class Detector(Worker):
         # Log which frame we're processing
         self.logger.info(f"Processing frame {frame_number}")
 
-        # Run detection
-        results = self.model(frame)
+        # Run detection with verbose=False to suppress YOLO's default logging
+        results = self.model(frame, verbose=False)
 
         # Process results
         detections = []
@@ -126,5 +126,4 @@ class Detector(Worker):
 
     def _finish(self) -> None:
         """Clean up detector resources."""
-        # Nothing to clean up for detector
-        pass
+        self.logger.warning("Detector worker cleanup complete")

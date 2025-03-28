@@ -19,10 +19,10 @@ def cli(config: str):
     Args:
         config: Path to the YAML configuration file
     """
-    logger = get_worker_logger("cli", "INFO")
+    logger = get_worker_logger("cli", "WARNING")
 
     def signal_handler(signum, frame):
-        logger.info("Received shutdown signal, stopping...")
+        logger.warning("Received shutdown signal, stopping...")
         if controller is not None:
             controller.stop()
 
@@ -46,7 +46,7 @@ def cli(config: str):
                     break
 
             if all_stopped:
-                logger.info("All workers have stopped, exiting...")
+                logger.warning("All workers have stopped, exiting...")
                 break
 
             # Small sleep to prevent CPU spinning
@@ -58,6 +58,6 @@ def cli(config: str):
         logger.error(traceback.format_exc())
         raise
     finally:
-        logger.info("Main loop stopped")
+        logger.warning("Main loop stopped")
         if controller is not None:
             controller.stop()

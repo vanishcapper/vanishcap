@@ -24,7 +24,7 @@ class Worker(ABC):
         self.name = name
         self.config = config
         self.logger = get_worker_logger(name, config.get("log_level"))
-        self.logger.info(f"Initialized {name} worker")
+        self.logger.warning(f"Initialized {name} worker")
 
         # Thread control
         self._run_thread: Optional[threading.Thread] = None
@@ -39,7 +39,7 @@ class Worker(ABC):
         self._max_task_time = 0.0  # Maximum task time in the last window
         self._profile_window = config.get("profile_window", 1.0)  # Window size in seconds for max time
         self._window_start = time.time()  # Start of the current window
-        self.logger.info(f"Using profile window of {self._profile_window:.1f}s")
+        self.logger.warning(f"Using profile window of {self._profile_window:.1f}s")
 
     def _get_max_task_time(self) -> float:
         """Get the maximum task time over the last window.
@@ -63,7 +63,7 @@ class Worker(ABC):
             controller: Reference to the Controller for event routing
             run_in_main_thread: If True, run the worker in the main thread
         """
-        self.logger.info(f"Starting {self.name} worker")
+        self.logger.warning(f"Starting {self.name} worker")
         self._stop_event.clear()
         self._controller = controller
 
@@ -122,7 +122,7 @@ class Worker(ABC):
 
         # Clean up resources when stopping
         self._finish()
-        self.logger.info(f"{self.name} loop stopped")
+        self.logger.warning(f"{self.name} loop stopped")
 
     @abstractmethod
     def _task(self) -> None:
@@ -144,7 +144,7 @@ class Worker(ABC):
 
         This method is common to all workers and handles the main event loop.
         """
-        self.logger.info(f"Starting {self.name} loop")
+        self.logger.warning(f"Starting {self.name} loop")
 
         try:
             while not self._stop_event.is_set():
@@ -191,12 +191,12 @@ class Worker(ABC):
                 pass
 
             self._finish()
-            self.logger.info(f"{self.name} loop stopped")
+            self.logger.warning(f"{self.name} loop stopped")
 
     def stop(self) -> None:
         """Stop the worker."""
         self.logger.debug(f"Worker {self.name} stopping")
-        self.logger.info(f"Stopping {self.name} worker")
+        self.logger.warning(f"Stopping {self.name} worker")
         self._stop_event.set()
 
         # Wait for thread to finish

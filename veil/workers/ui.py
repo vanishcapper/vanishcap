@@ -32,7 +32,7 @@ class Ui(Worker):
         self.target_fps = config.get("fps", 30)
         self.frame_time = 1.0 / self.target_fps
         self.last_frame_time = 0
-        self.logger.info(f"Initialized UI worker with window size: {self.window_size} and target FPS: {self.target_fps}")
+        self.logger.warning(f"Initialized UI worker with window size: {self.window_size} and target FPS: {self.target_fps}")
 
         # Initialize pygame modules
         try:
@@ -40,7 +40,7 @@ class Ui(Worker):
             pygame.font.init()
             self.screen = pygame.display.set_mode(self.window_size)
             pygame.display.set_caption("Veil UI")
-            self.logger.info("Pygame modules initialized")
+            self.logger.warning("Pygame modules initialized")
         except Exception as e:
             self.logger.error(f"Failed to initialize pygame modules: {e}")
             traceback.print_exc()
@@ -152,4 +152,4 @@ class Ui(Worker):
         """Clean up pygame resources."""
         pygame.font.quit()
         pygame.display.quit()
-        self.logger.info("Pygame modules stopped")
+        self.logger.warning("Pygame modules stopped")

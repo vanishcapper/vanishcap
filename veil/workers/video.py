@@ -20,7 +20,7 @@ class Video(Worker):
         """
         super().__init__("video", config)
         self.source = config["source"]
-        self.logger.info(f"Initialized video worker with source: {self.source}")
+        self.logger.warning(f"Initialized video worker with source: {self.source}")
 
         # Initialize video capture
         self.cap = cv2.VideoCapture(self.source)
@@ -28,7 +28,7 @@ class Video(Worker):
             self.logger.error(f"Failed to open video source: {self.source}")
             raise RuntimeError(f"Failed to open video source: {self.source}")
 
-        self.logger.info("Successfully opened video source")
+        self.logger.warning("Successfully opened video source")
 
         # Initialize state
         self.current_frame = None
@@ -68,4 +68,4 @@ class Video(Worker):
         """Clean up video resources."""
         if self.cap is not None:
             self.cap.release()
-            self.logger.info("Video capture released")
+            self.logger.warning("Video capture released")
