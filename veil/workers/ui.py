@@ -83,8 +83,11 @@ class Ui(Worker):
         if self.current_frame is not None:
             current_time = time.time()
             if (current_time - self.last_frame_time) >= self.frame_time:
+                # Flip frame horizontally
+                frame_flipped = cv2.flip(self.current_frame, 1)  # 1 means flip horizontally
+
                 # Convert frame to RGB for pygame
-                frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+                frame_rgb = cv2.cvtColor(frame_flipped, cv2.COLOR_BGR2RGB)
 
                 # Convert to pygame surface
                 frame_surface = pygame.surfarray.make_surface(frame_rgb.swapaxes(0, 1))
@@ -103,7 +106,7 @@ class Ui(Worker):
                         # Get frame dimensions for scaling
                         frame_height, frame_width = self.current_frame.shape[:2]
 
-                        # Scale bbox to window size
+                        # Scale bbox to window size and flip x coordinates
                         x1, y1, x2, y2 = [
                             int(bbox[0] * self.window_size[0] / frame_width),
                             int(bbox[1] * self.window_size[1] / frame_height),
@@ -111,14 +114,18 @@ class Ui(Worker):
                             int(bbox[3] * self.window_size[1] / frame_height)
                         ]
 
+                        # Flip x coordinates
+                        x1_flipped = self.window_size[0] - x2
+                        x2_flipped = self.window_size[0] - x1
+
                         # Draw bounding box
-                        pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
+                        pygame.draw.rect(self.screen, (0, 255, 0), (x1_flipped, y1, x2_flipped-x1_flipped, y2-y1), 2)
 
                         # Draw label
                         label = f"{detection['class_name']} ({detection['confidence']:.2f})"
                         font = pygame.font.Font(None, 24)
                         text = font.render(label, True, (0, 255, 0))
-                        self.screen.blit(text, (x1, y1-20))
+                        self.screen.blit(text, (x1_flipped, y1-20))
 
                 # Draw profiling information in bottom left
                 y_offset = self.window_size[1] - 25  # Start 25 pixels from bottom
