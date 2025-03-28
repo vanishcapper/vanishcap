@@ -1,17 +1,17 @@
 [project]
 name = "veil"
 version = "0.1.0"
-description = "A command line tool"
-authors = []
+description = "A real-time object detection and tracking system"
+requires-python = ">=3.8"
 dependencies = [
     "click>=8.1.0",
-    "ultralytics>=8.0.0",
     "djitellopy>=2.5.0",
-    "opencv-python>=4.8.0",
-    "vidgear>=0.3.0",
-    "pygame>=2.5.0",
     "omegaconf>=2.3.0",
-    "cython==3.0.11",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "pygame>=2.5.0",
+    "tensorrt>=8.6.0",
+    "ultralytics>=8.0.0",
 ]
 
 [project.optional-dependencies]
@@ -39,4 +39,7 @@ max-line-length = 120
 disable = [
     "C0330",  # wrong-hanging-indentation (conflicts with black)
     "C0326",  # bad-whitespace (conflicts with black)
-] 
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["veil"]

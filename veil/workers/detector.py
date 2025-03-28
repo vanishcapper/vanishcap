@@ -3,6 +3,8 @@
 from typing import Any, Dict, List, Optional
 import numpy as np
 import queue
+import os
+from pathlib import Path
 
 from ultralytics import YOLO
 from veil.event import Event
@@ -20,15 +22,39 @@ class Detector(Worker):
                 - model: Path to YOLO model file
                 - frame_skip: Number of frames to skip between detections
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                - use_tensorrt: Optional bool to use TensorRT (default: False)
+                - tensorrt_engine: Optional path to save/load TensorRT engine
         """
         super().__init__("detector", config)
         self.model_path = config["model"]
         self.frame_skip = config.get("frame_skip", 1)  # Default to 1 frame
+        self.use_tensorrt = config.get("use_tensorrt", False)
+        self.tensorrt_engine = config.get("tensorrt_engine", None)
         self.logger.warning(f"Initialized detector worker with model: {self.model_path}")
 
         # Initialize YOLO model
-        self.model = YOLO(self.model_path)
-        self.logger.warning("Successfully loaded YOLO model")
+        if self.use_tensorrt:
+            if self.tensorrt_engine and os.path.exists(self.tensorrt_engine):
+                # Load existing TensorRT engine
+                self.logger.warning(f"Loading TensorRT engine from: {self.tensorrt_engine}")
+                self.model = YOLO(self.tensorrt_engine)
+                self.logger.warning("Successfully loaded TensorRT engine")
+            else:
+                # Convert PyTorch model to TensorRT
+                self.logger.warning("Converting PyTorch model to TensorRT...")
+                self.model = YOLO(self.model_path)
+                if self.tensorrt_engine:
+                    # Save engine to specified path
+                    self.model.export(format="engine", device=0, half=True, workspace=4, verbose=False)
+                    self.logger.warning(f"Saved TensorRT engine to: {self.tensorrt_engine}")
+                else:
+                    # Use default engine path
+                    engine_path = str(Path(self.model_path).with_suffix('.engine'))
+                    self.logger.warning(f"Saved TensorRT engine to: {engine_path}")
+        else:
+            # Use regular PyTorch model
+            self.model = YOLO(self.model_path)
+            self.logger.warning("Successfully loaded YOLO model")
 
         # Warm up model with blank image
         self.logger.warning("Warming up model with blank image...")

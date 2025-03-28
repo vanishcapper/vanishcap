@@ -14,6 +14,8 @@ detector:
   log_level: WARNING  # Show frame processing info
   profile_window: 2.0  # Show max task time over last 2 seconds
   depends_on: []  # No dependencies
+  use_tensorrt: true  # Use TensorRT for faster inference
+  tensorrt_engine: yolov5nu.engine  # Save/load TensorRT engine
   events:
     - video: frame  # Receive frame events from video
 
