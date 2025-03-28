@@ -33,7 +33,7 @@ class Ui(Worker):
         self.frame_time = 1.0 / self.target_fps
         self.last_frame_time = 0
         self.logger.info(f"Initialized UI worker with window size: {self.window_size} and target FPS: {self.target_fps}")
-        
+
         # Initialize pygame modules
         try:
             pygame.display.init()
@@ -45,10 +45,14 @@ class Ui(Worker):
             self.logger.error(f"Failed to initialize pygame modules: {e}")
             traceback.print_exc()
             raise
-        
+
         # Initialize state
         self.current_frame = None
         self.current_detections = []
+
+        # Profiling data
+        self.worker_profiles: Dict[str, float] = {}  # Maps worker name to last task time
+        self.profile_font = pygame.font.Font(None, 20)  # Small font for profiling text
 
     def _task(self) -> None:
         """Run one iteration of the UI loop."""
@@ -74,31 +78,31 @@ class Ui(Worker):
                     except queue.Empty:
                         pass
                 return
-        
+
         # Update display if we have a frame and enough time has passed
         if self.current_frame is not None:
             current_time = time.time()
             if (current_time - self.last_frame_time) >= self.frame_time:
                 # Convert frame to RGB for pygame
                 frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
-                
+
                 # Convert to pygame surface
                 frame_surface = pygame.surfarray.make_surface(frame_rgb.swapaxes(0, 1))
-                
+
                 # Scale frame to window size
                 frame_surface = pygame.transform.scale(frame_surface, self.window_size)
-                
+
                 # Draw frame
                 self.screen.blit(frame_surface, (0, 0))
-                
+
                 # Draw detections if any
                 if self.current_detections:
                     for detection in self.current_detections:
                         bbox = detection["bbox"]
-                        
+
                         # Get frame dimensions for scaling
                         frame_height, frame_width = self.current_frame.shape[:2]
-                        
+
                         # Scale bbox to window size
                         x1, y1, x2, y2 = [
                             int(bbox[0] * self.window_size[0] / frame_width),
@@ -106,16 +110,26 @@ class Ui(Worker):
                             int(bbox[2] * self.window_size[0] / frame_width),
                             int(bbox[3] * self.window_size[1] / frame_height)
                         ]
-                        
+
                         # Draw bounding box
                         pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
-                        
+
                         # Draw label
                         label = f"{detection['class_name']} ({detection['confidence']:.2f})"
                         font = pygame.font.Font(None, 24)
                         text = font.render(label, True, (0, 255, 0))
                         self.screen.blit(text, (x1, y1-20))
-                
+
+                # Draw profiling information in bottom left
+                y_offset = self.window_size[1] - 25  # Start 25 pixels from bottom
+                for worker_name, task_time in self.worker_profiles.items():
+                    # Format time in milliseconds with 2 decimal places
+                    time_str = f"{task_time * 1000:.2f}ms"
+                    profile_text = f"{worker_name}: {time_str}"
+                    text = self.profile_font.render(profile_text, True, (255, 255, 255))
+                    self.screen.blit(text, (10, y_offset))
+                    y_offset -= 20  # Move up 20 pixels for next worker
+
                 # Update display
                 pygame.display.flip()
                 self.last_frame_time = current_time
@@ -136,6 +150,10 @@ class Ui(Worker):
             self.logger.info("Received stop event")
             self._stop_event.set()
             pygame.display.quit()
+        elif event.event_name == "worker_profile":
+            # Update profiling data for the worker
+            self.worker_profiles[event.worker_name] = event.data["task_time"]
+            self.logger.debug(f"Updated profile for {event.worker_name}: {event.data['task_time']:.3f}s")
         else:
             self.logger.debug(f"Received unknown event: {event.event_name}")
 
@@ -143,4 +161,4 @@ class Ui(Worker):
         """Clean up pygame resources."""
         pygame.font.quit()
         pygame.display.quit()
-        self.logger.info("Pygame modules stopped") 
+        self.logger.info("Pygame modules stopped")
