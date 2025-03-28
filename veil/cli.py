@@ -4,10 +4,8 @@ import click
 import signal
 import traceback
 import time
-from pathlib import Path
 
 from veil.controller import Controller
-from veil.event import Event
 from veil.utils.logging import get_worker_logger
 
 

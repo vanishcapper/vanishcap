@@ -3,9 +3,8 @@
 import queue
 import threading
 import time
-import traceback
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from veil.event import Event
 from veil.utils.logging import get_worker_logger

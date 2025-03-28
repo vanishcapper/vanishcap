@@ -3,12 +3,11 @@
 import importlib
 import inspect
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 from omegaconf import OmegaConf
 from veil.event import Event
 from veil.worker import Worker
-from veil.workers.ui import Ui
 from veil.utils.logging import get_worker_logger
 
 
@@ -25,10 +24,15 @@ class Controller:
             FileNotFoundError: If the config file doesn't exist
             ValueError: If the config is invalid
         """
-        self.logger = get_worker_logger("controller", "INFO")
-        self.logger.info(f"Initializing controller with config: {config_path}")
-
+        # Load config first to get controller's log level
         self.config = self._load_config(config_path)
+
+        # Initialize logger with config's log level
+        controller_config = self.config.get("controller", {})
+        log_level = controller_config.get("log_level", "WARNING")
+        self.logger = get_worker_logger("controller", log_level)
+        self.logger.warning(f"Initializing controller with config: {config_path}")
+
         self.workers: Dict[str, Worker] = {}
         self.event_routes: Dict[str, Set[str]] = {}
 
@@ -38,7 +42,7 @@ class Controller:
         # Build event routing map
         self._build_event_routes()
 
-        self.logger.info("Controller initialized")
+        self.logger.warning("Controller initialized")
 
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         """Load configuration from file.
@@ -90,11 +94,14 @@ class Controller:
             if inspect.isclass(cls) and issubclass(cls, Worker) and cls != Worker
         }
 
+        # Get list of worker sections (excluding controller)
+        worker_sections = [name for name in self.config.keys() if name != "controller"]
+
         # Initialize workers in dependency order
         initialized_workers: Set[str] = set()
-        while len(initialized_workers) < len(self.config):
+        while len(initialized_workers) < len(worker_sections):
             initialized_any = False
-            for worker_type, worker_config in self.config.items():
+            for worker_type in worker_sections:
                 # Skip already initialized workers
                 if worker_type in initialized_workers:
                     continue
@@ -110,14 +117,13 @@ class Controller:
 
                     worker_class = worker_classes[worker_type_lower]
                     # Initialize the worker
-                    self.workers[worker_type] = worker_class(worker_config)
+                    self.workers[worker_type] = worker_class(self.config[worker_type])
                     initialized_workers.add(worker_type)
                     initialized_any = True
 
             # If we couldn't initialize any workers and we're not done, we have a circular dependency
             if not initialized_any:
-                remaining = [name for name in self.config.keys()
-                           if name not in initialized_workers]
+                remaining = [name for name in worker_sections if name not in initialized_workers]
                 raise ValueError(f"Circular dependency detected. Remaining workers: {remaining}")
 
     def _build_event_routes(self) -> None:
@@ -128,6 +134,10 @@ class Controller:
         """
         # Don't add stop events to routing - they're handled directly
         for worker_name, worker_config in self.config.items():
+            # Skip the controller section
+            if worker_name == "controller":
+                continue
+
             worker_lower = worker_name.lower()
             if worker_lower not in self.workers:
                 raise ValueError(f"Unknown worker: {worker_name}")
@@ -164,6 +174,8 @@ class Controller:
 
     def start(self) -> None:
         """Start all workers."""
+        from veil.workers.ui import Ui  # Import here since it's only used in this method
+
         # Find UI worker if it exists
         ui_worker = None
         for name, worker in self.workers.items():

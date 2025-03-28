@@ -1,15 +1,19 @@
 """Worker for displaying video frames and detection results."""
 
 import traceback
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 import queue
 import time
+import os
 import cv2
+
+# Suppress pygame startup message
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+
 import pygame
 import pygame.display
 import pygame.event
 import pygame.image
-import pygame.time
 
 from veil.event import Event
 from veil.worker import Worker
@@ -59,18 +63,10 @@ class Ui(Worker):
         # Handle pygame events
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
-                print(f"DEBUG: UI worker received ESC/QUIT event")
-                self.logger.info("Received quit event")
-                # Emit stop event to notify controller
-                print(f"DEBUG: UI worker emitting stop event")
+                self.logger.warning("Received quit event")
                 self._emit(Event(self.name, "stop", None))
-                # Set stop flag to stop UI loop
-                print(f"DEBUG: UI worker setting stop flag")
                 self._stop_event.set()
-                # Close pygame window
-                print(f"DEBUG: UI worker closing pygame window")
                 pygame.display.quit()
-                # Process any pending events before returning
                 if self._event_queue is not None:
                     try:
                         event = self._event_queue.get_nowait()
@@ -80,61 +76,63 @@ class Ui(Worker):
                 return
 
         # Update display if we have a frame and enough time has passed
-        if self.current_frame_event is not None:
-            current_time = time.time()
-            if current_time - self.last_frame_time >= self.frame_time:
-                # Extract frame data
-                frame = self.current_frame_event.data["frame"]
-                frame_number = self.current_frame_event.data["frame_number"]
+        if self.current_frame_event is None:
+            return
 
-                # Log which frame we're displaying
-                self.logger.info(f"Displaying frame {frame_number}")
+        current_time = time.time()
+        if current_time - self.last_frame_time >= self.frame_time:
+            # Extract frame data
+            frame = self.current_frame_event.data["frame"]
+            frame_number = self.current_frame_event.data["frame_number"]
 
-                # Convert frame to pygame surface
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_surface = pygame.image.frombuffer(frame_rgb.tobytes(), frame_rgb.shape[1::-1], "RGB")
+            # Log which frame we're displaying
+            self.logger.info(f"Displaying frame {frame_number}")
 
-                # Get original frame dimensions
-                orig_height, orig_width = frame.shape[:2]
+            # Convert frame to pygame surface
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_surface = pygame.image.frombuffer(frame_rgb.tobytes(), frame_rgb.shape[1::-1], "RGB")
 
-                # Scale frame to window size
-                frame_surface = pygame.transform.scale(frame_surface, self.window_size)
+            # Get original frame dimensions
+            orig_height, orig_width = frame.shape[:2]
 
-                # Draw frame
-                self.screen.blit(frame_surface, (0, 0))
+            # Scale frame to window size
+            frame_surface = pygame.transform.scale(frame_surface, self.window_size)
 
-                # Draw detection boxes
-                for detection in self.current_detections:
-                    bbox = detection["bbox"]
-                    # Scale bbox coordinates to match scaled frame size
-                    x1, y1, x2, y2 = [int(coord) for coord in bbox]
-                    x1 = int(x1 * self.window_size[0] / orig_width)
-                    y1 = int(y1 * self.window_size[1] / orig_height)
-                    x2 = int(x2 * self.window_size[0] / orig_width)
-                    y2 = int(y2 * self.window_size[1] / orig_height)
-                    pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
+            # Draw frame
+            self.screen.blit(frame_surface, (0, 0))
 
-                    # Draw label
-                    label = f"{detection['class_name']} ({detection['confidence']:.2f})"
-                    text = self.profile_font.render(label, True, (0, 255, 0))
-                    self.screen.blit(text, (x1, y1-20))
+            # Draw detection boxes
+            for detection in self.current_detections:
+                bbox = detection["bbox"]
+                # Scale bbox coordinates to match scaled frame size
+                x1, y1, x2, y2 = [int(coord) for coord in bbox]
+                x1 = int(x1 * self.window_size[0] / orig_width)
+                y1 = int(y1 * self.window_size[1] / orig_height)
+                x2 = int(x2 * self.window_size[0] / orig_width)
+                y2 = int(y2 * self.window_size[1] / orig_height)
+                pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
 
-                # Draw frame number in top right
-                frame_text = self.profile_font.render(f"Frame: {frame_number}", True, (255, 255, 255))
-                text_rect = frame_text.get_rect()
-                text_rect.topright = (self.window_size[0] - 10, 10)
-                self.screen.blit(frame_text, text_rect)
+                # Draw label
+                label = f"{detection['class_name']} ({detection['confidence']:.2f})"
+                text = self.profile_font.render(label, True, (0, 255, 0))
+                self.screen.blit(text, (x1, y1-20))
 
-                # Draw profiling data
-                y = 10
-                for worker_name, task_time in self.worker_profiles.items():
-                    text = self.profile_font.render(f"{worker_name}: {task_time*1000:.1f}ms", True, (255, 255, 255))
-                    self.screen.blit(text, (10, y))
-                    y += 20
+            # Draw frame number in top right
+            frame_text = self.profile_font.render(f"Frame: {frame_number}", True, (255, 255, 255))
+            text_rect = frame_text.get_rect()
+            text_rect.topright = (self.window_size[0] - 10, 10)
+            self.screen.blit(frame_text, text_rect)
 
-                # Update display
-                pygame.display.flip()
-                self.last_frame_time = current_time
+            # Draw profiling data
+            y = 10
+            for worker_name, task_time in self.worker_profiles.items():
+                text = self.profile_font.render(f"{worker_name}: {task_time*1000:.1f}ms", True, (255, 255, 255))
+                self.screen.blit(text, (10, y))
+                y += 20
+
+            # Update display
+            pygame.display.flip()
+            self.last_frame_time = current_time
 
     def __call__(self, event: Event) -> None:
         """Handle incoming events.

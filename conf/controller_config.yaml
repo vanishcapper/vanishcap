@@ -1,4 +1,7 @@
 # Controller configuration with multiple workers
+controller:
+  log_level: WARNING  # Log level for the controller itself
+
 video:
   source: 4
   log_level: WARNING  # Show frame acquisition info
