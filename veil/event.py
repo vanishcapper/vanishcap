@@ -16,4 +16,4 @@ class Event:
 
     worker_name: str
     event_name: str
-    data: Any = None 
+    data: Any = None

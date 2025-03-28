@@ -8,7 +8,7 @@ import os
 import cv2
 
 # Suppress pygame startup message
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 import pygame
 import pygame.display
@@ -36,7 +36,9 @@ class Ui(Worker):
         self.target_fps = config.get("fps", 30)
         self.frame_time = 1.0 / self.target_fps
         self.last_frame_time = 0
-        self.logger.warning(f"Initialized UI worker with window size: {self.window_size} and target FPS: {self.target_fps}")
+        self.logger.warning(
+            f"Initialized UI worker with window size: {self.window_size} and target FPS: {self.target_fps}"
+        )
 
         # Initialize pygame modules
         try:
@@ -110,12 +112,12 @@ class Ui(Worker):
                 y1 = int(y1 * self.window_size[1] / orig_height)
                 x2 = int(x2 * self.window_size[0] / orig_width)
                 y2 = int(y2 * self.window_size[1] / orig_height)
-                pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
+                pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2 - x1, y2 - y1), 2)
 
                 # Draw label
                 label = f"{detection['class_name']} ({detection['confidence']:.2f})"
                 text = self.profile_font.render(label, True, (0, 255, 0))
-                self.screen.blit(text, (x1, y1-20))
+                self.screen.blit(text, (x1, y1 - 20))
 
             # Draw frame number in top right
             frame_text = self.profile_font.render(f"Frame: {frame_number}", True, (255, 255, 255))
@@ -148,7 +150,9 @@ class Ui(Worker):
             # Log detection drawing
             for det in self.current_detections:
                 x1, y1, x2, y2 = det["bbox"]
-                self.logger.info(f"Drawing {det['class_name']} ({det['confidence']:.2f}) at pixels ({x1:.1f}, {y1:.1f}) - ({x2:.1f}, {y2:.1f})")
+                self.logger.info(
+                    f"Drawing {det['class_name']} ({det['confidence']:.2f}) at pixels ({x1:.1f}, {y1:.1f}) - ({x2:.1f}, {y2:.1f})"
+                )
         elif event.event_name == "worker_profile":
             # Update profiling data for the worker
             worker_name = event.worker_name

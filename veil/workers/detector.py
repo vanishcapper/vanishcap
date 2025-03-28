@@ -49,7 +49,7 @@ class Detector(Worker):
                     self.logger.warning(f"Saved TensorRT engine to: {self.tensorrt_engine}")
                 else:
                     # Use default engine path
-                    engine_path = str(Path(self.model_path).with_suffix('.engine'))
+                    engine_path = str(Path(self.model_path).with_suffix(".engine"))
                     self.logger.warning(f"Saved TensorRT engine to: {engine_path}")
         else:
             # Use regular PyTorch model
@@ -109,14 +109,13 @@ class Detector(Worker):
                 class_name = self.model.names[class_id]
 
                 # Log detection details
-                self.logger.info(f"Detected {class_name} ({confidence:.2f}) at ({x1:.1f}, {y1:.1f}) - ({x2:.1f}, {y2:.1f})")
+                self.logger.info(
+                    f"Detected {class_name} ({confidence:.2f}) at ({x1:.1f}, {y1:.1f}) - ({x2:.1f}, {y2:.1f})"
+                )
 
-                detections.append({
-                    "bbox": [x1, y1, x2, y2],
-                    "confidence": confidence,
-                    "class_id": class_id,
-                    "class_name": class_name
-                })
+                detections.append(
+                    {"bbox": [x1, y1, x2, y2], "confidence": confidence, "class_id": class_id, "class_name": class_name}
+                )
 
         # Emit detection event
         self._emit(Event(self.name, "detection", detections))

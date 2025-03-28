@@ -90,7 +90,8 @@ class Controller:
 
         # Get all worker classes from the module
         worker_classes = {
-            name.lower(): cls for name, cls in inspect.getmembers(worker_module)
+            name.lower(): cls
+            for name, cls in inspect.getmembers(worker_module)
             if inspect.isclass(cls) and issubclass(cls, Worker) and cls != Worker
         }
 
@@ -111,9 +112,7 @@ class Controller:
                     worker_type_lower = worker_type.lower()
                     if worker_type_lower not in worker_classes:
                         available = ", ".join(sorted(worker_classes.keys()))
-                        raise ValueError(
-                            f"Unknown worker type '{worker_type}'. Available workers: {available}"
-                        )
+                        raise ValueError(f"Unknown worker type '{worker_type}'. Available workers: {available}")
 
                     worker_class = worker_classes[worker_type_lower]
                     # Initialize the worker
@@ -158,7 +157,9 @@ class Controller:
 
                 # Each event spec should have a single key:value pair
                 if len(event_spec) != 1:
-                    raise ValueError(f"Event spec for {worker_name} should have exactly one key:value pair: {event_spec}")
+                    raise ValueError(
+                        f"Event spec for {worker_name} should have exactly one key:value pair: {event_spec}"
+                    )
 
                 source_worker, event_name = next(iter(event_spec.items()))
                 source_worker_lower = source_worker.lower()

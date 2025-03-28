@@ -48,10 +48,7 @@ class Video(Worker):
 
         # Emit frame event with frame number
         self.logger.info(f"Acquired frame {self.frame_number}")
-        self._emit(Event(self.name, "frame", {
-            "frame": frame,
-            "frame_number": self.frame_number
-        }))
+        self._emit(Event(self.name, "frame", {"frame": frame, "frame_number": self.frame_number}))
 
     def __call__(self, event: Event) -> None:
         """Handle incoming events.

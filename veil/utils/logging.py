@@ -10,7 +10,7 @@ class WorkerNameFilter(logging.Filter):
     def filter(self, record):
         """Extract worker name from the full logger name and pad it."""
         # Get the last part of the logger name (after the last dot)
-        worker_name = record.name.split('.')[-1]
+        worker_name = record.name.split(".")[-1]
         # Pad to match length of "controller" (10 chars)
         record.worker_name = worker_name.ljust(10)
         # Get first letter of level name twice (e.g., "WW" for WARNING)
@@ -48,9 +48,7 @@ def get_worker_logger(worker_name: str, log_level: Optional[str] = None) -> logg
         # Add filter to extract worker name
         name_filter = WorkerNameFilter()
         handler.addFilter(name_filter)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(level_short)s - %(worker_name)s %(message)s'
-        )
+        formatter = logging.Formatter("%(asctime)s - %(level_short)s - %(worker_name)s %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 

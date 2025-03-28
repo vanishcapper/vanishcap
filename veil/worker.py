@@ -100,11 +100,7 @@ class Worker(ABC):
             self.logger.debug(f"Worker {self.name} max task execution time: {max_time:.3f}s")
 
             # Emit profiling event with max time
-            self._emit(Event(
-                worker_name=self.name,
-                event_name="worker_profile",
-                data={"task_time": max_time}
-            ))
+            self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
 
             # If stop event was received, break immediately
             if self._stop_event.is_set():
@@ -168,11 +164,7 @@ class Worker(ABC):
                 self.logger.debug(f"Worker {self.name} max task execution time: {max_time:.3f}s")
 
                 # Emit profiling event with max time
-                self._emit(Event(
-                    worker_name=self.name,
-                    event_name="worker_profile",
-                    data={"task_time": max_time}
-                ))
+                self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
 
                 # Small sleep to prevent CPU spinning
                 time.sleep(0.001)  # Reduced sleep time to process frames more frequently

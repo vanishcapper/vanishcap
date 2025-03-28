@@ -21,7 +21,7 @@ class Navigator(Worker):
         super().__init__("navigator", config)
         self.target_class = config["target_class"]
         self.logger.info(f"Initialized navigator worker with target class: {self.target_class}")
-        
+
         # Initialize state
         self.detection_queue = queue.Queue()
 
@@ -32,28 +32,23 @@ class Navigator(Worker):
             detections = self.detection_queue.get_nowait()
         except queue.Empty:
             return
-            
+
         # Process detections
-        target_detections = [
-            d for d in detections
-            if d["class_name"] == self.target_class
-        ]
-        
+        target_detections = [d for d in detections if d["class_name"] == self.target_class]
+
         if target_detections:
             # Get the largest target (closest to camera)
             target = max(target_detections, key=lambda d: (d["bbox"][2] - d["bbox"][0]) * (d["bbox"][3] - d["bbox"][1]))
-            
+
             # Calculate target position
             bbox = target["bbox"]
             center_x = (bbox[0] + bbox[2]) / 2
             center_y = (bbox[1] + bbox[3]) / 2
-            
+
             # Emit navigation event
-            self._emit(Event(self.name, "navigation", {
-                "x": center_x,
-                "y": center_y,
-                "confidence": target["confidence"]
-            }))
+            self._emit(
+                Event(self.name, "navigation", {"x": center_x, "y": center_y, "confidence": target["confidence"]})
+            )
 
     def __call__(self, event: Event) -> None:
         """Handle incoming events.
@@ -69,4 +64,4 @@ class Navigator(Worker):
     def _finish(self) -> None:
         """Clean up navigator resources."""
         # Nothing to clean up for navigator
-        pass 
+        pass
