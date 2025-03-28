@@ -21,17 +21,18 @@ class Video(Worker):
         super().__init__("video", config)
         self.source = config["source"]
         self.logger.info(f"Initialized video worker with source: {self.source}")
-        
+
         # Initialize video capture
         self.cap = cv2.VideoCapture(self.source)
         if not self.cap.isOpened():
             self.logger.error(f"Failed to open video source: {self.source}")
             raise RuntimeError(f"Failed to open video source: {self.source}")
-            
+
         self.logger.info("Successfully opened video source")
-        
+
         # Initialize state
         self.current_frame = None
+        self.frame_number = 0  # Track frame number
 
     def _task(self) -> None:
         """Run one iteration of the video loop."""
@@ -41,9 +42,16 @@ class Video(Worker):
             self.logger.error("Failed to read frame")
             self._stop_event.set()
             return
-            
-        # Emit frame event
-        self._emit(Event(self.name, "frame", frame))
+
+        # Increment frame number
+        self.frame_number += 1
+
+        # Emit frame event with frame number
+        self.logger.info(f"Acquired frame {self.frame_number}")
+        self._emit(Event(self.name, "frame", {
+            "frame": frame,
+            "frame_number": self.frame_number
+        }))
 
     def __call__(self, event: Event) -> None:
         """Handle incoming events.
@@ -60,4 +68,4 @@ class Video(Worker):
         """Clean up video resources."""
         if self.cap is not None:
             self.cap.release()
-            self.logger.info("Video capture released") 
+            self.logger.info("Video capture released")

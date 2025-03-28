@@ -47,7 +47,7 @@ class Ui(Worker):
             raise
 
         # Initialize state
-        self.current_frame = None
+        self.current_frame_event = None
         self.current_detections = []
 
         # Profiling data
@@ -80,17 +80,19 @@ class Ui(Worker):
                 return
 
         # Update display if we have a frame and enough time has passed
-        if self.current_frame is not None:
+        if self.current_frame_event is not None:
             current_time = time.time()
-            if (current_time - self.last_frame_time) >= self.frame_time:
-                # Flip frame horizontally
-                frame_flipped = cv2.flip(self.current_frame, 1)  # 1 means flip horizontally
+            if current_time - self.last_frame_time >= self.frame_time:
+                # Extract frame data
+                frame = self.current_frame_event.data["frame"]
+                frame_number = self.current_frame_event.data["frame_number"]
 
-                # Convert frame to RGB for pygame
-                frame_rgb = cv2.cvtColor(frame_flipped, cv2.COLOR_BGR2RGB)
+                # Log which frame we're displaying
+                self.logger.info(f"Displaying frame {frame_number}")
 
-                # Convert to pygame surface
-                frame_surface = pygame.surfarray.make_surface(frame_rgb.swapaxes(0, 1))
+                # Convert frame to pygame surface
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame_surface = pygame.image.frombuffer(frame_rgb.tobytes(), frame_rgb.shape[1::-1], "RGB")
 
                 # Scale frame to window size
                 frame_surface = pygame.transform.scale(frame_surface, self.window_size)
@@ -98,44 +100,30 @@ class Ui(Worker):
                 # Draw frame
                 self.screen.blit(frame_surface, (0, 0))
 
-                # Draw detections if any
-                if self.current_detections:
-                    for detection in self.current_detections:
-                        bbox = detection["bbox"]
+                # Draw detection boxes
+                for detection in self.current_detections:
+                    bbox = detection["bbox"]
+                    # Scale bbox coordinates to window size
+                    x1, y1, x2, y2 = [int(coord) for coord in bbox]
+                    pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
 
-                        # Get frame dimensions for scaling
-                        frame_height, frame_width = self.current_frame.shape[:2]
+                    # Draw label
+                    label = f"{detection['class_name']} ({detection['confidence']:.2f})"
+                    text = self.profile_font.render(label, True, (0, 255, 0))
+                    self.screen.blit(text, (x1, y1-20))
 
-                        # Scale bbox to window size and flip x coordinates
-                        x1, y1, x2, y2 = [
-                            int(bbox[0] * self.window_size[0] / frame_width),
-                            int(bbox[1] * self.window_size[1] / frame_height),
-                            int(bbox[2] * self.window_size[0] / frame_width),
-                            int(bbox[3] * self.window_size[1] / frame_height)
-                        ]
+                # Draw frame number in top right
+                frame_text = self.profile_font.render(f"Frame: {frame_number}", True, (255, 255, 255))
+                text_rect = frame_text.get_rect()
+                text_rect.topright = (self.window_size[0] - 10, 10)
+                self.screen.blit(frame_text, text_rect)
 
-                        # Flip x coordinates
-                        x1_flipped = self.window_size[0] - x2
-                        x2_flipped = self.window_size[0] - x1
-
-                        # Draw bounding box
-                        pygame.draw.rect(self.screen, (0, 255, 0), (x1_flipped, y1, x2_flipped-x1_flipped, y2-y1), 2)
-
-                        # Draw label
-                        label = f"{detection['class_name']} ({detection['confidence']:.2f})"
-                        font = pygame.font.Font(None, 24)
-                        text = font.render(label, True, (0, 255, 0))
-                        self.screen.blit(text, (x1_flipped, y1-20))
-
-                # Draw profiling information in bottom left
-                y_offset = self.window_size[1] - 25  # Start 25 pixels from bottom
+                # Draw profiling data
+                y = 10
                 for worker_name, task_time in self.worker_profiles.items():
-                    # Format time in milliseconds with 2 decimal places
-                    time_str = f"{task_time * 1000:.2f}ms"
-                    profile_text = f"{worker_name}: {time_str}"
-                    text = self.profile_font.render(profile_text, True, (255, 255, 255))
-                    self.screen.blit(text, (10, y_offset))
-                    y_offset -= 20  # Move up 20 pixels for next worker
+                    text = self.profile_font.render(f"{worker_name}: {task_time*1000:.1f}ms", True, (255, 255, 255))
+                    self.screen.blit(text, (10, y))
+                    y += 20
 
                 # Update display
                 pygame.display.flip()
@@ -148,19 +136,15 @@ class Ui(Worker):
             event: Event to handle
         """
         if event.event_name == "frame":
-            self.current_frame = event.data
-            self.logger.debug(f"Received frame event")
+            # Store the full event
+            self.current_frame_event = event
         elif event.event_name == "detection":
             self.current_detections = event.data
-            self.logger.debug(f"Received detection event with {len(event.data)} detections")
-        elif event.event_name == "stop":
-            self.logger.info("Received stop event")
-            self._stop_event.set()
-            pygame.display.quit()
         elif event.event_name == "worker_profile":
             # Update profiling data for the worker
-            self.worker_profiles[event.worker_name] = event.data["task_time"]
-            self.logger.debug(f"Updated profile for {event.worker_name}: {event.data['task_time']:.3f}s")
+            worker_name = event.worker_name
+            task_time = event.data["task_time"]  # Extract task_time from profile data
+            self.worker_profiles[worker_name] = task_time
         else:
             self.logger.debug(f"Received unknown event: {event.event_name}")
 

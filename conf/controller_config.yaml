@@ -1,27 +1,31 @@
 # Controller configuration with multiple workers
 video:
   source: 0
-  log_level: INFO
+  log_level: INFO  # Show frame acquisition info
   profile_window: 1.0  # Show max task time over last second
+  depends_on: ["detector"]  # Wait for detector to start
 
 detector:
   model: yolov5nu.pt
-  frame_skip: 50
-  log_level: INFO
-  profile_window: 5.0  # Show max task time over last 5 seconds
+  frame_skip: 1  # Process every frame
+  log_level: INFO  # Show frame processing info
+  profile_window: 2.0  # Show max task time over last 2 seconds
+  depends_on: []  # No dependencies
   events:
     - video: frame  # Receive frame events from video
 
 navigator:
   target_class: 0  # Track humans (class ID 0)
   log_level: INFO
-  profile_window: 1.0
+  profile_window: 1.5  # Show max task time over last 1.5 seconds
+  depends_on: ["detector"]  # Wait for detector to start
   events:
     - detector: detection  # Receive detection events from detector
 
 ui:
-  log_level: INFO
+  log_level: INFO  # Show frame display info
   profile_window: 1.0  # Show max task time over last second
+  depends_on: []  # No dependencies, can start anytime
   events:
     - video: frame        # Receive frame events from video
     - detector: detection  # Receive detection events from detector

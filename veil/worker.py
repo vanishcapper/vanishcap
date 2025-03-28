@@ -176,7 +176,7 @@ class Worker(ABC):
                 ))
 
                 # Small sleep to prevent CPU spinning
-                time.sleep(0.01)
+                time.sleep(0.001)  # Reduced sleep time to process frames more frequently
         except Exception as e:
             self.logger.error(f"Error in {self.name} loop: {e}")
             traceback.print_exc()
