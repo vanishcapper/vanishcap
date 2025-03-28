@@ -94,6 +94,9 @@ class Ui(Worker):
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frame_surface = pygame.image.frombuffer(frame_rgb.tobytes(), frame_rgb.shape[1::-1], "RGB")
 
+                # Get original frame dimensions
+                orig_height, orig_width = frame.shape[:2]
+
                 # Scale frame to window size
                 frame_surface = pygame.transform.scale(frame_surface, self.window_size)
 
@@ -103,8 +106,12 @@ class Ui(Worker):
                 # Draw detection boxes
                 for detection in self.current_detections:
                     bbox = detection["bbox"]
-                    # Scale bbox coordinates to window size
+                    # Scale bbox coordinates to match scaled frame size
                     x1, y1, x2, y2 = [int(coord) for coord in bbox]
+                    x1 = int(x1 * self.window_size[0] / orig_width)
+                    y1 = int(y1 * self.window_size[1] / orig_height)
+                    x2 = int(x2 * self.window_size[0] / orig_width)
+                    y2 = int(y2 * self.window_size[1] / orig_height)
                     pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2-x1, y2-y1), 2)
 
                     # Draw label
@@ -140,11 +147,21 @@ class Ui(Worker):
             self.current_frame_event = event
         elif event.event_name == "detection":
             self.current_detections = event.data
+            # Log detection drawing
+            for det in self.current_detections:
+                x1, y1, x2, y2 = det["bbox"]
+                self.logger.info(f"Drawing {det['class_name']} ({det['confidence']:.2f}) at pixels ({x1:.1f}, {y1:.1f}) - ({x2:.1f}, {y2:.1f})")
         elif event.event_name == "worker_profile":
             # Update profiling data for the worker
             worker_name = event.worker_name
             task_time = event.data["task_time"]  # Extract task_time from profile data
             self.worker_profiles[worker_name] = task_time
+        elif event.event_name == "command":
+            # Handle command events
+            if event.data == "quit":
+                self.logger.warning("Received quit event")
+                self._stop_event.set()
+                return
         else:
             self.logger.debug(f"Received unknown event: {event.event_name}")
 
