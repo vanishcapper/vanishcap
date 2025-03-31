@@ -3,6 +3,7 @@
 import queue
 import threading
 import time
+import traceback
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
@@ -10,7 +11,7 @@ from veil.event import Event
 from veil.utils.logging import get_worker_logger
 
 
-class Worker(ABC):
+class Worker(ABC):  # pylint: disable=too-many-instance-attributes
     """Base class for all workers in the system."""
 
     def __init__(self, name: str, config: Dict[str, Any]) -> None:
@@ -23,7 +24,7 @@ class Worker(ABC):
         self.name = name
         self.config = config
         self.logger = get_worker_logger(name, config.get("log_level"))
-        self.logger.warning(f"Initialized {name} worker")
+        self.logger.warning("Initialized %s worker", name)
 
         # Thread control
         self._run_thread: Optional[threading.Thread] = None
@@ -38,7 +39,7 @@ class Worker(ABC):
         self._max_task_time = 0.0  # Maximum task time in the last window
         self._profile_window = config.get("profile_window", 1.0)  # Window size in seconds for max time
         self._window_start = time.time()  # Start of the current window
-        self.logger.warning(f"Using profile window of {self._profile_window:.1f}s")
+        self.logger.warning("Using profile window of %.1fs", self._profile_window)
 
     def _get_max_task_time(self) -> float:
         """Get the maximum task time over the last window.
@@ -62,7 +63,7 @@ class Worker(ABC):
             controller: Reference to the Controller for event routing
             run_in_main_thread: If True, run the worker in the main thread
         """
-        self.logger.warning(f"Starting {self.name} worker")
+        self.logger.warning("Starting %s worker", self.name)
         self._stop_event.clear()
         self._controller = controller
 
@@ -79,7 +80,7 @@ class Worker(ABC):
             # Process any pending events
             try:
                 event = self._event_queue.get_nowait()
-                self.logger.debug(f"Worker {self.name} processing event {event.event_name}")
+                self.logger.debug("Worker %s processing event %s", self.name, event.event_name)
                 self(event)
                 # If stop event was received, break immediately
                 if self._stop_event.is_set():
@@ -97,7 +98,7 @@ class Worker(ABC):
 
             # Get and log max time
             max_time = self._get_max_task_time()
-            self.logger.debug(f"Worker {self.name} max task execution time: {max_time:.3f}s")
+            self.logger.debug("Worker %s max task execution time: %.3fs", self.name, max_time)
 
             # Emit profiling event with max time
             self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
@@ -110,14 +111,14 @@ class Worker(ABC):
         try:
             while True:
                 event = self._event_queue.get_nowait()
-                self.logger.debug(f"Worker {self.name} processing remaining event {event.event_name}")
+                self.logger.debug("Worker %s processing remaining event %s", self.name, event.event_name)
                 self(event)
         except queue.Empty:
             pass
 
         # Clean up resources when stopping
         self._finish()
-        self.logger.warning(f"{self.name} loop stopped")
+        self.logger.warning("%s loop stopped", self.name)
 
     @abstractmethod
     def _task(self) -> None:
@@ -125,28 +126,26 @@ class Worker(ABC):
 
         This method should be implemented by each worker to perform its specific task.
         """
-        pass
 
     def _finish(self) -> None:
         """Clean up resources when the worker is stopping.
 
         This method should be implemented by each worker to clean up its resources.
         """
-        pass
 
     def _run(self) -> None:
         """Main run loop for the worker.
 
         This method is common to all workers and handles the main event loop.
         """
-        self.logger.warning(f"Starting {self.name} loop")
+        self.logger.warning("Starting %s loop", self.name)
 
         try:
             while not self._stop_event.is_set():
                 # Process any pending events
                 try:
                     event = self._event_queue.get_nowait()
-                    self.logger.debug(f"Worker {self.name} processing event {event.event_name}")
+                    self.logger.debug("Worker %s processing event %s", self.name, event.event_name)
                     self(event)
                 except queue.Empty:
                     pass
@@ -161,44 +160,44 @@ class Worker(ABC):
 
                 # Get and log max time
                 max_time = self._get_max_task_time()
-                self.logger.debug(f"Worker {self.name} max task execution time: {max_time:.3f}s")
+                self.logger.debug("Worker %s max task execution time: %.3fs", self.name, max_time)
 
                 # Emit profiling event with max time
                 self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
 
                 # Small sleep to prevent CPU spinning
                 time.sleep(0.001)  # Reduced sleep time to process frames more frequently
-        except Exception as e:
-            self.logger.error(f"Error in {self.name} loop: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.logger.error("Error in %s loop: %s", self.name, e)
             traceback.print_exc()
         finally:
             # Process any remaining events before finishing
             try:
                 while True:
                     event = self._event_queue.get_nowait()
-                    self.logger.debug(f"Worker {self.name} processing remaining event {event.event_name}")
+                    self.logger.debug("Worker %s processing remaining event %s", self.name, event.event_name)
                     self(event)
             except queue.Empty:
                 pass
 
             self._finish()
-            self.logger.warning(f"{self.name} loop stopped")
+            self.logger.warning("%s loop stopped", self.name)
 
     def stop(self) -> None:
         """Stop the worker."""
-        self.logger.debug(f"Worker {self.name} stopping")
-        self.logger.warning(f"Stopping {self.name} worker")
+        self.logger.debug("Worker %s stopping", self.name)
+        self.logger.warning("Stopping %s worker", self.name)
         self._stop_event.set()
 
         # Wait for thread to finish
         if self._run_thread is not None and self._run_thread.is_alive():
-            self.logger.debug(f"Worker {self.name} joining run thread")
+            self.logger.debug("Worker %s joining run thread", self.name)
             self._run_thread.join()
 
         # Clean up resources
-        self.logger.debug(f"Worker {self.name} calling _finish")
+        self.logger.debug("Worker %s calling _finish", self.name)
         self._finish()
-        self.logger.debug(f"Worker {self.name} stopped")
+        self.logger.debug("Worker %s stopped", self.name)
 
     def _dispatch(self, event: Event) -> None:
         """Handle an incoming event from the Controller.
@@ -210,9 +209,9 @@ class Worker(ABC):
         Args:
             event: Event to handle
         """
-        self.logger.debug(f"Worker {self.name} dispatching event {event.event_name}")
+        self.logger.debug("Worker %s dispatching event %s", self.name, event.event_name)
         self._event_queue.put(event)
-        self.logger.debug(f"Worker {self.name} event {event.event_name} queued")
+        self.logger.debug("Worker %s event %s queued", self.name, event.event_name)
 
     def _emit(self, event: Event) -> None:
         """Emit an event to the Controller.
@@ -221,9 +220,9 @@ class Worker(ABC):
             event: Event to emit
         """
         if self._controller is not None:
-            self.logger.debug(f"Worker {self.name} emitting event {event.event_name}")
+            self.logger.debug("Worker %s emitting event %s", self.name, event.event_name)
             self._controller(event)
-            self.logger.debug(f"Worker {self.name} event {event.event_name} routed")
+            self.logger.debug("Worker %s event %s routed", self.name, event.event_name)
 
     @abstractmethod
     def __call__(self, event: Event) -> None:
@@ -232,4 +231,3 @@ class Worker(ABC):
         Args:
             event: Event to handle
         """
-        pass

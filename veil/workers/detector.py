@@ -1,12 +1,13 @@
 """Worker for detecting objects in frames using YOLOv5."""
 
-from typing import Any, Dict, List, Optional
-import numpy as np
-import queue
 import os
+import queue
 from pathlib import Path
+from typing import Any, Dict
 
+import numpy as np
 from ultralytics import YOLO
+
 from veil.event import Event
 from veil.worker import Worker
 
@@ -30,13 +31,13 @@ class Detector(Worker):
         self.frame_skip = config.get("frame_skip", 1)  # Default to 1 frame
         self.use_tensorrt = config.get("use_tensorrt", False)
         self.tensorrt_engine = config.get("tensorrt_engine", None)
-        self.logger.warning(f"Initialized detector worker with model: {self.model_path}")
+        self.logger.warning("Initialized detector worker with model: %s", self.model_path)
 
         # Initialize YOLO model
         if self.use_tensorrt:
             if self.tensorrt_engine and os.path.exists(self.tensorrt_engine):
                 # Load existing TensorRT engine
-                self.logger.warning(f"Loading TensorRT engine from: {self.tensorrt_engine}")
+                self.logger.warning("Loading TensorRT engine from: %s", self.tensorrt_engine)
                 self.model = YOLO(self.tensorrt_engine)
                 self.logger.warning("Successfully loaded TensorRT engine")
             else:
@@ -46,11 +47,11 @@ class Detector(Worker):
                 if self.tensorrt_engine:
                     # Save engine to specified path
                     self.model.export(format="engine", device=0, half=True, workspace=4, verbose=False)
-                    self.logger.warning(f"Saved TensorRT engine to: {self.tensorrt_engine}")
+                    self.logger.warning("Saved TensorRT engine to: %s", self.tensorrt_engine)
                 else:
                     # Use default engine path
                     engine_path = str(Path(self.model_path).with_suffix(".engine"))
-                    self.logger.warning(f"Saved TensorRT engine to: {engine_path}")
+                    self.logger.warning("Saved TensorRT engine to: %s", engine_path)
         else:
             # Use regular PyTorch model
             self.model = YOLO(self.model_path)
@@ -77,9 +78,9 @@ class Detector(Worker):
             if self.frame_count % self.frame_skip == 0:
                 # Store the full event
                 self.latest_frame_event = event
-                self.logger.info(f"Received frame {event.data['frame_number']}")
+                self.logger.info("Received frame %d", event.data["frame_number"])
         else:
-            self.logger.debug(f"Received unknown event: {event.event_name}")
+            self.logger.debug("Received unknown event: %s", event.event_name)
 
     def _task(self) -> None:
         """Run one iteration of the detector loop."""
@@ -92,7 +93,7 @@ class Detector(Worker):
         frame_number = self.latest_frame_event.data["frame_number"]
 
         # Log which frame we're processing
-        self.logger.info(f"Processing frame {frame_number}")
+        self.logger.info("Processing frame %d", frame_number)
 
         # Run detection with verbose=False to suppress YOLO's default logging
         results = self.model(frame, verbose=False)
@@ -110,7 +111,13 @@ class Detector(Worker):
 
                 # Log detection details
                 self.logger.info(
-                    f"Detected {class_name} ({confidence:.2f}) at ({x1:.1f}, {y1:.1f}) - ({x2:.1f}, {y2:.1f})"
+                    "Detected %s (%.2f) at (%.1f, %.1f) - (%.1f, %.1f)",
+                    class_name,
+                    confidence,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
                 )
 
                 detections.append(
@@ -138,19 +145,19 @@ class Detector(Worker):
                 while True:
                     old_event = self._event_queue.get_nowait()
                     if old_event.event_name == "frame":
-                        self.logger.debug(f"Discarding old frame event {old_event.data['frame_number']}")
+                        self.logger.debug("Discarding old frame event %d", old_event.data["frame_number"])
             except queue.Empty:
                 pass
 
             # Add the new frame event
-            self.logger.debug(f"Worker {self.name} dispatching frame event {event.data['frame_number']}")
+            self.logger.debug("Worker %s dispatching frame event %d", self.name, event.data["frame_number"])
             self._event_queue.put(event)
-            self.logger.debug(f"Worker {self.name} frame event {event.data['frame_number']} queued")
+            self.logger.debug("Worker %s frame event %d queued", self.name, event.data["frame_number"])
         else:
             # Use default queue behavior for non-frame events
-            self.logger.debug(f"Worker {self.name} dispatching event {event.event_name}")
+            self.logger.debug("Worker %s dispatching event %s", self.name, event.event_name)
             self._event_queue.put(event)
-            self.logger.debug(f"Worker {self.name} event {event.event_name} queued")
+            self.logger.debug("Worker %s event %s queued", self.name, event.event_name)
 
     def _finish(self) -> None:
         """Clean up detector resources."""

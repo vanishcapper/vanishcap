@@ -1,6 +1,6 @@
 """Worker for capturing video frames from a source."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import cv2
 from veil.event import Event
@@ -20,12 +20,12 @@ class Video(Worker):
         """
         super().__init__("video", config)
         self.source = config["source"]
-        self.logger.warning(f"Initialized video worker with source: {self.source}")
+        self.logger.warning("Initialized video worker with source: %s", self.source)
 
         # Initialize video capture
-        self.cap = cv2.VideoCapture(self.source)
+        self.cap = cv2.VideoCapture(self.source)  # pylint: disable=no-member
         if not self.cap.isOpened():
-            self.logger.error(f"Failed to open video source: {self.source}")
+            self.logger.error("Failed to open video source: %s", self.source)
             raise RuntimeError(f"Failed to open video source: {self.source}")
 
         self.logger.warning("Successfully opened video source")
@@ -47,7 +47,7 @@ class Video(Worker):
         self.frame_number += 1
 
         # Emit frame event with frame number
-        self.logger.info(f"Acquired frame {self.frame_number}")
+        self.logger.info("Acquired frame %d", self.frame_number)
         self._emit(Event(self.name, "frame", {"frame": frame, "frame_number": self.frame_number}))
 
     def __call__(self, event: Event) -> None:
@@ -57,9 +57,9 @@ class Video(Worker):
             event: Event to handle
         """
         if event.event_name == "command":
-            self.logger.info(f"Received command: {event.data}")
+            self.logger.info("Received command: %s", event.data)
         else:
-            self.logger.debug(f"Received unknown event: {event.event_name}")
+            self.logger.debug("Received unknown event: %s", event.event_name)
 
     def _finish(self) -> None:
         """Clean up video resources."""

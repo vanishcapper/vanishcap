@@ -3,7 +3,7 @@
 import importlib
 import inspect
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, Set
 
 from omegaconf import OmegaConf
 from veil.event import Event
@@ -31,7 +31,7 @@ class Controller:
         controller_config = self.config.get("controller", {})
         log_level = controller_config.get("log_level", "WARNING")
         self.logger = get_worker_logger("controller", log_level)
-        self.logger.warning(f"Initializing controller with config: {config_path}")
+        self.logger.warning("Initializing controller with config: %s", config_path)
 
         self.workers: Dict[str, Worker] = {}
         self.event_routes: Dict[str, Set[str]] = {}
@@ -65,7 +65,7 @@ class Controller:
             config = OmegaConf.load(config_path)
             return OmegaConf.to_container(config)
         except Exception as e:
-            raise ValueError(f"Failed to load config: {e}")
+            raise ValueError(f"Failed to load config: {e}") from e
 
     def _can_init_worker(self, worker_name: str, initialized_workers: Set[str]) -> bool:
         """Check if a worker's dependencies have been initialized.
@@ -175,7 +175,7 @@ class Controller:
 
     def start(self) -> None:
         """Start all workers."""
-        from veil.workers.ui import Ui  # Import here since it's only used in this method
+        from veil.workers.ui import Ui  # pylint: disable=import-outside-toplevel  # Import here to avoid circular imports
 
         # Find UI worker if it exists
         ui_worker = None
@@ -187,20 +187,20 @@ class Controller:
         # Start non-UI workers first
         for name, worker in self.workers.items():
             if not isinstance(worker, Ui):
-                self.logger.debug(f"Starting worker: {name}")
+                self.logger.debug("Starting worker: %s", name)
                 worker.start(self)
 
         # Start UI worker in main thread if it exists
         if ui_worker is not None:
             name, worker = ui_worker
-            self.logger.debug(f"Starting UI worker: {name}")
+            self.logger.debug("Starting UI worker: %s", name)
             worker.start(self, run_in_main_thread=True)
 
     def stop(self) -> None:
         """Stop all workers."""
         self.logger.debug("Stopping all workers")
         for name, worker in self.workers.items():
-            self.logger.debug(f"Stopping worker: {name}")
+            self.logger.debug("Stopping worker: %s", name)
             worker.stop()
         self.logger.debug("All workers stopped")
 
@@ -210,26 +210,26 @@ class Controller:
         Args:
             event: Event to handle
         """
-        self.logger.debug(f"Controller received event: {event.event_name} from {event.worker_name}")
+        self.logger.debug("Controller received event: %s from %s", event.event_name, event.worker_name)
 
         # Handle stop event from any worker by stopping all workers
         if event.event_name == "stop":
-            self.logger.debug(f"Controller received stop event from {event.worker_name}, stopping all workers")
+            self.logger.debug("Controller received stop event from %s, stopping all workers", event.worker_name)
             self.stop()
             return
 
         # Get target workers for this event type
         targets = self.event_routes.get(event.event_name, set())
-        self.logger.debug(f"Routing event {event.event_name} to targets: {targets}")
+        self.logger.debug("Routing event %s to targets: %s", event.event_name, targets)
 
         # Route event to each target worker
         for target in targets:
             target_lower = target.lower()
             if target_lower in self.workers:
-                self.logger.debug(f"Controller routing event to worker: {target}")
+                self.logger.debug("Controller routing event to worker: %s", target)
                 self.workers[target]._dispatch(event)
             else:
-                self.logger.warning(f"Unknown target worker: {target}")
+                self.logger.warning("Unknown target worker: %s", target)
 
     def __enter__(self) -> "Controller":
         """Context manager entry."""

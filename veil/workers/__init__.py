@@ -5,4 +5,4 @@ from veil.workers.navigator import Navigator
 from veil.workers.ui import Ui
 from veil.workers.video import Video
 
-__all__ = ["Detector", "Navigator", "UI", "Video"]
+__all__ = ["Detector", "Navigator", "Ui", "Video"]

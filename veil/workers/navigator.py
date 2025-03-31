@@ -1,7 +1,7 @@
 """Worker for processing detections and emitting navigation commands."""
 
-from typing import Any, Dict, List, Optional
 import queue
+from typing import Any, Dict
 
 from veil.event import Event
 from veil.worker import Worker
@@ -20,7 +20,7 @@ class Navigator(Worker):
         """
         super().__init__("navigator", config)
         self.target_class = config["target_class"]
-        self.logger.info(f"Initialized navigator worker with target class: {self.target_class}")
+        self.logger.info("Initialized navigator worker with target class: %s", self.target_class)
 
         # Initialize state
         self.detection_queue = queue.Queue()
@@ -59,9 +59,8 @@ class Navigator(Worker):
         if event.event_name == "detection":
             self.detection_queue.put(event.data)
         else:
-            self.logger.debug(f"Received unknown event: {event.event_name}")
+            self.logger.debug("Received unknown event: %s", event.event_name)
 
     def _finish(self) -> None:
         """Clean up navigator resources."""
         # Nothing to clean up for navigator
-        pass

@@ -36,10 +36,7 @@ line-length = 120
 max-line-length = 120
 
 [tool.pylint.messages_control]
-disable = [
-    "C0330",  # wrong-hanging-indentation (conflicts with black)
-    "C0326",  # bad-whitespace (conflicts with black)
-]
+disable = []
 
 [tool.hatch.build.targets.wheel]
 packages = ["veil"]

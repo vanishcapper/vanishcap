@@ -1,9 +1,10 @@
 """Command line interface for veil."""
 
-import click
 import signal
-import traceback
 import time
+import traceback
+
+import click
 
 from veil.controller import Controller
 from veil.utils.logging import get_worker_logger
@@ -19,7 +20,13 @@ def cli(config: str):
     """
     logger = get_worker_logger("cli", "WARNING")
 
-    def signal_handler(signum, frame):
+    def signal_handler(signum, frame):  # pylint: disable=unused-argument
+        """Handle shutdown signals.
+
+        Args:
+            signum: Signal number
+            frame: Current stack frame
+        """
         logger.warning("Received shutdown signal, stopping...")
         if controller is not None:
             controller.stop()
@@ -39,7 +46,7 @@ def cli(config: str):
             # Check if all workers have stopped
             all_stopped = True
             for worker in controller.workers.values():
-                if worker._run_thread is not None and worker._run_thread.is_alive():
+                if worker._run_thread is not None and worker._run_thread.is_alive():  # pylint: disable=protected-access
                     all_stopped = False
                     break
 
@@ -51,7 +58,7 @@ def cli(config: str):
             time.sleep(0.001)  # 1ms sleep
 
     except Exception as e:
-        logger.error(f"Error in main loop: {e}")
+        logger.error("Error in main loop: %s", e)
         logger.error("Stack trace:")
         logger.error(traceback.format_exc())
         raise
