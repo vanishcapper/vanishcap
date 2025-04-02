@@ -74,38 +74,42 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
             # For main thread workers, process events in the main loop
             self._run_with_events()
 
+    def _process_events(self) -> None:
+        """Process any pending events in the queue."""
+        try:
+            event = self._event_queue.get_nowait()
+            self.logger.debug("Worker %s processing event %s", self.name, event.event_name)
+            self(event)
+            # If stop event was received, break immediately
+            if self._stop_event.is_set():
+                return
+        except queue.Empty:
+            pass
+
+    def _run_iteration(self) -> None:
+        """Run one iteration of the worker's main loop."""
+        # Process any pending events
+        self._process_events()
+
+        # Run one iteration of the main loop with timing
+        start_time = time.perf_counter()
+        self._task()
+        self._last_task_time = time.perf_counter() - start_time
+
+        # Update max time if this task took longer
+        self._max_task_time = max(self._max_task_time, self._last_task_time)
+
+        # Get and log max time
+        max_time = self._get_max_task_time()
+        self.logger.debug("Worker %s max task execution time: %.3fs", self.name, max_time)
+
+        # Emit profiling event with max time
+        self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
+
     def _run_with_events(self) -> None:
         """Run the worker in the main thread, processing events."""
         while not self._stop_event.is_set():
-            # Process any pending events
-            try:
-                event = self._event_queue.get_nowait()
-                self.logger.debug("Worker %s processing event %s", self.name, event.event_name)
-                self(event)
-                # If stop event was received, break immediately
-                if self._stop_event.is_set():
-                    break
-            except queue.Empty:
-                pass
-
-            # Run one iteration of the main loop with timing
-            start_time = time.perf_counter()
-            self._task()
-            self._last_task_time = time.perf_counter() - start_time
-
-            # Update max time if this task took longer
-            self._max_task_time = max(self._max_task_time, self._last_task_time)
-
-            # Get and log max time
-            max_time = self._get_max_task_time()
-            self.logger.debug("Worker %s max task execution time: %.3fs", self.name, max_time)
-
-            # Emit profiling event with max time
-            self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
-
-            # If stop event was received, break immediately
-            if self._stop_event.is_set():
-                break
+            self._run_iteration()
 
         # Process any remaining events before finishing
         try:
@@ -120,19 +124,6 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
         self._finish()
         self.logger.warning("%s loop stopped", self.name)
 
-    @abstractmethod
-    def _task(self) -> None:
-        """Run one iteration of the worker's task.
-
-        This method should be implemented by each worker to perform its specific task.
-        """
-
-    def _finish(self) -> None:
-        """Clean up resources when the worker is stopping.
-
-        This method should be implemented by each worker to clean up its resources.
-        """
-
     def _run(self) -> None:
         """Main run loop for the worker.
 
@@ -142,29 +133,7 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
 
         try:
             while not self._stop_event.is_set():
-                # Process any pending events
-                try:
-                    event = self._event_queue.get_nowait()
-                    self.logger.debug("Worker %s processing event %s", self.name, event.event_name)
-                    self(event)
-                except queue.Empty:
-                    pass
-
-                # Run one iteration of the main loop with timing
-                start_time = time.perf_counter()
-                self._task()
-                self._last_task_time = time.perf_counter() - start_time
-
-                # Update max time if this task took longer
-                self._max_task_time = max(self._max_task_time, self._last_task_time)
-
-                # Get and log max time
-                max_time = self._get_max_task_time()
-                self.logger.debug("Worker %s max task execution time: %.3fs", self.name, max_time)
-
-                # Emit profiling event with max time
-                self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
-
+                self._run_iteration()
                 # Small sleep to prevent CPU spinning
                 time.sleep(0.001)  # Reduced sleep time to process frames more frequently
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -230,4 +199,17 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
 
         Args:
             event: Event to handle
+        """
+
+    @abstractmethod
+    def _task(self) -> None:
+        """Run one iteration of the worker's task.
+
+        This method should be implemented by each worker to perform its specific task.
+        """
+
+    def _finish(self) -> None:
+        """Clean up resources when the worker is stopping.
+
+        This method should be implemented by each worker to clean up its resources.
         """
