@@ -7,8 +7,8 @@ import traceback
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
-from veil.event import Event
-from veil.utils.logging import get_worker_logger
+from vanishcap.event import Event
+from vanishcap.utils.logging import get_worker_logger
 
 
 class Worker(ABC):  # pylint: disable=too-many-instance-attributes

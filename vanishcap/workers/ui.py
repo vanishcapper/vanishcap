@@ -16,8 +16,8 @@ import pygame.display  # noqa: C0413
 import pygame.event  # noqa: C0413
 import pygame.image  # noqa: C0413
 
-from veil.event import Event  # noqa: C0413
-from veil.worker import Worker  # noqa: C0413
+from vanishcap.event import Event  # noqa: C0413
+from vanishcap.worker import Worker  # noqa: C0413
 
 
 class Ui(Worker):
@@ -51,7 +51,7 @@ class Ui(Worker):
             pygame.display.init()
             pygame.font.init()
             self.screen = pygame.display.set_mode(self.display_config["window_size"])
-            pygame.display.set_caption("veil")
+            pygame.display.set_caption("vanishcap")
             self.logger.warning("Pygame modules initialized")
         except Exception as e:
             self.logger.error("Failed to initialize pygame modules: %s", e)

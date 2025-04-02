@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any, Dict, Set
 
 from omegaconf import OmegaConf
-from veil.event import Event
-from veil.worker import Worker
-from veil.utils.logging import get_worker_logger
+from vanishcap.event import Event
+from vanishcap.worker import Worker
+from vanishcap.utils.logging import get_worker_logger
 
 
 class Controller:
@@ -86,7 +86,7 @@ class Controller:
     def _init_workers(self) -> None:
         """Initialize all workers in dependency order."""
         # Import the workers module
-        worker_module = importlib.import_module("veil.workers")
+        worker_module = importlib.import_module("vanishcap.workers")
 
         # Get all worker classes from the module
         worker_classes = {
@@ -175,7 +175,7 @@ class Controller:
 
     def start(self) -> None:
         """Start all workers."""
-        from veil.workers.ui import Ui  # pylint: disable=import-outside-toplevel  # Import here to avoid circular imports
+        from vanishcap.workers.ui import Ui  # pylint: disable=import-outside-toplevel  # Import here to avoid circular imports
 
         # Find UI worker if it exists
         ui_worker = None

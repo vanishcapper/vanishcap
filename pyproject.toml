@@ -1,5 +1,5 @@
 [project]
-name = "veil"
+name = "vanishcap"
 version = "0.1.0"
 description = "A real-time object detection and tracking system"
 requires-python = ">=3.8"
@@ -30,7 +30,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-veil = "veil.cli:cli"
+vanishcap = "vanishcap.cli:cli"
 
 [tool.black]
 line-length = 120
@@ -42,4 +42,4 @@ max-line-length = 120
 disable = []
 
 [tool.hatch.build.targets.wheel]
-packages = ["veil"]
+packages = ["vanishcap"]

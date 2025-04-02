@@ -1,4 +1,4 @@
-"""Logging utilities for veil."""
+"""Logging utilities for vanishcap."""
 
 import logging
 from typing import Optional
@@ -29,7 +29,7 @@ def get_worker_logger(worker_name: str, log_level: Optional[str] = None) -> logg
     Returns:
         logging.Logger: Configured logger instance
     """
-    logger = logging.getLogger(f"veil.workers.{worker_name}")
+    logger = logging.getLogger(f"vanishcap.workers.{worker_name}")
 
     # Set log level from config or default to INFO
     if log_level:

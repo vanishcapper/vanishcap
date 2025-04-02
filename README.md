@@ -1,6 +1,6 @@
-# Veil
+# Vanishcap
 
-A command line tool.
+Autonomous UAV software to act as a partner when you'd rather not be seen.
 
 ## Dependencies
 
@@ -40,17 +40,17 @@ black .
 Pylint is configured to work alongside Black. To run the linter:
 
 ```bash
-pylint veil
+pylint vanishcap
 ```
 
 ## Usage
 
-After installation, you can use the `veil` command:
+After installation, you can use the `vanishcap` command:
 
 ```bash
 # Show help
-veil --help
+vanishcap --help
 
-# Run the hello command
-veil hello
-``` 
+# Run vanishcap with config
+vanishcap conf/controller_config.yaml
+```

@@ -1,4 +1,4 @@
-"""Command line interface for veil."""
+"""Command line interface for vanishcap."""
 
 import signal
 import time
@@ -6,14 +6,14 @@ import traceback
 
 import click
 
-from veil.controller import Controller
-from veil.utils.logging import get_worker_logger
+from vanishcap.controller import Controller
+from vanishcap.utils.logging import get_worker_logger
 
 
 @click.group(invoke_without_command=True)
 @click.argument("config", type=click.Path(exists=True))
 def cli(config: str):
-    """Run the veil pipeline with the specified config file.
+    """Run the vanishcap pipeline with the specified config file.
 
     Args:
         config: Path to the YAML configuration file

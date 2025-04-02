@@ -1,4 +1,4 @@
-"""Event data structure for the veil system."""
+"""Event data structure for the vanishcap system."""
 
 from dataclasses import dataclass
 from typing import Any

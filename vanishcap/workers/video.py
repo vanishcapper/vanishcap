@@ -3,8 +3,8 @@
 from typing import Any, Dict
 
 import cv2
-from veil.event import Event
-from veil.worker import Worker
+from vanishcap.event import Event
+from vanishcap.worker import Worker
 
 
 class Video(Worker):
