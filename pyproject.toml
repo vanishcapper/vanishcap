@@ -12,6 +12,9 @@ dependencies = [
     "pygame>=2.5.0",
     "tensorrt>=8.6.0",
     "ultralytics>=8.0.0",
+    "onnx>=1.15.0",
+    "onnxruntime>=1.16.0",
+    "onnxslim>=0.1.49",
 ]
 
 [project.optional-dependencies]

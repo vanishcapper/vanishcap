@@ -3,7 +3,7 @@ controller:
   log_level: WARNING # Log level for the controller itself
 
 video:
-  source: 4
+  source: 0
   log_level: WARNING # Show frame acquisition info
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["detector"] # Wait for detector to start
