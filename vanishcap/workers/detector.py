@@ -30,30 +30,35 @@ class Detector(Worker):
         self.backend = config.get("backend", "pytorch")
         self.logger.warning("Initialized detector worker with model base: %s", self.model_base)
 
+        # Create assets directory if it doesn't exist
+        self.assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets")
+        os.makedirs(self.assets_dir, exist_ok=True)
+        self.logger.warning("Using assets directory: %s", self.assets_dir)
+
         # Determine model path based on backend
         if self.backend == "tensorrt":
-            model_path = f"{self.model_base}.engine"
+            model_path = os.path.join(self.assets_dir, f"{self.model_base}.engine")
             if not os.path.exists(model_path):
                 # Convert PyTorch model to TensorRT
                 self.logger.warning("Converting PyTorch model to TensorRT...")
-                pytorch_path = f"{self.model_base}.pt"
+                pytorch_path = os.path.join(self.assets_dir, f"{self.model_base}.pt")
                 model = YOLO(pytorch_path, task="detect")
-                # Save engine to default path
-                model.export(format="engine", device=0, half=True, workspace=4, verbose=False)
+                # Save engine to assets directory
+                model.export(format="engine", device=0, half=True, workspace=4, verbose=False, save_dir=self.assets_dir)
                 self.logger.warning("Saved TensorRT engine to: %s", model_path)
         elif self.backend == "onnx":
-            model_path = f"{self.model_base}.onnx"
+            model_path = os.path.join(self.assets_dir, f"{self.model_base}.onnx")
             if not os.path.exists(model_path):
                 # Convert PyTorch model to ONNX
                 self.logger.warning("Converting PyTorch model to ONNX...")
-                pytorch_path = f"{self.model_base}.pt"
+                pytorch_path = os.path.join(self.assets_dir, f"{self.model_base}.pt")
                 model = YOLO(pytorch_path, task="detect")
-                # Save ONNX to default path
-                model.export(format="onnx", verbose=False)
+                # Save ONNX to assets directory
+                model.export(format="onnx", verbose=False, save_dir=self.assets_dir)
                 self.logger.warning("Saved ONNX model to: %s", model_path)
         elif self.backend == "pytorch":
             # Use regular PyTorch model
-            model_path = f"{self.model_base}.pt"
+            model_path = os.path.join(self.assets_dir, f"{self.model_base}.pt")
         else:
             # Raise exception for unknown backend
             raise ValueError(f"Unknown backend: {self.backend}. Supported backends are: pytorch, tensorrt, onnx")
