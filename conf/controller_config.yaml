@@ -1,40 +1,39 @@
 # Controller configuration with multiple workers
 controller:
-  log_level: WARNING  # Log level for the controller itself
+  log_level: WARNING # Log level for the controller itself
 
 video:
   source: 4
-  log_level: WARNING  # Show frame acquisition info
-  profile_window: 1.0  # Show max task time over last second
-  depends_on: ["detector"]  # Wait for detector to start
+  log_level: WARNING # Show frame acquisition info
+  profile_window: 1.0 # Show max task time over last second
+  depends_on: ["detector"] # Wait for detector to start
 
 detector:
-  model: yolov5nu.pt
-  frame_skip: 1  # Process every frame
-  log_level: WARNING  # Show frame processing info
-  profile_window: 2.0  # Show max task time over last 2 seconds
-  depends_on: []  # No dependencies
-  use_tensorrt: true  # Use TensorRT for faster inference
-  tensorrt_engine: yolov5nu.engine  # Save/load TensorRT engine
+  model: yolov5nu # Base model path without extension
+  backend: onnx # Use ONNX for cross-platform compatibility
+  frame_skip: 1 # Process every frame
+  log_level: WARNING # Show frame processing info
+  profile_window: 2.0 # Show max task time over last 2 seconds
+  depends_on: [] # No dependencies
   events:
-    - video: frame  # Receive frame events from video
+    - video: frame # Receive frame events from video
 
 navigator:
-  target_class: 0  # Track humans (class ID 0)
+  target_class: 0 # Track humans (class ID 0)
   log_level: WARNING
-  profile_window: 1.5  # Show max task time over last 1.5 seconds
-  depends_on: ["detector"]  # Wait for detector to start
+  profile_window: 1.5 # Show max task time over last 1.5 seconds
+  depends_on: ["detector"] # Wait for detector to start
   events:
-    - detector: detection  # Receive detection events from detector
+    - detector: detection # Receive detection events from detector
 
 ui:
-  log_level: WARNING  # Show frame display info
-  profile_window: 1.0  # Show max task time over last second
-  depends_on: []  # No dependencies, can start anytime
+  log_level: WARNING # Show frame display info
+  profile_window: 1.0 # Show max task time over last second
+  depends_on: [] # No dependencies, can start anytime
   events:
-    - video: frame        # Receive frame events from video
-    - detector: detection  # Receive detection events from detector
-    - video: worker_profile      # Receive profiling data from video worker
-    - detector: worker_profile   # Receive profiling data from detector worker
-    - navigator: worker_profile  # Receive profiling data from navigator worker
-    - ui: worker_profile        # Receive profiling data from UI worker
+    - video: frame # Receive frame events from video
+    - detector: detection # Receive detection events from detector
+    - video: worker_profile # Receive profiling data from video worker
+    - detector: worker_profile # Receive profiling data from detector worker
+    - navigator: worker_profile # Receive profiling data from navigator worker
+    - ui: worker_profile # Receive profiling data from UI worker

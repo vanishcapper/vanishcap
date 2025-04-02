@@ -2,7 +2,6 @@
 
 import os
 import queue
-from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
@@ -20,42 +19,49 @@ class Detector(Worker):
 
         Args:
             config: Configuration dictionary containing:
-                - model: Path to YOLO model file
+                - model: Base path to YOLO model (without extension)
                 - frame_skip: Number of frames to skip between detections
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-                - use_tensorrt: Optional bool to use TensorRT (default: False)
-                - tensorrt_engine: Optional path to save/load TensorRT engine
+                - backend: Optional backend to use (pytorch, tensorrt, onnx) (default: pytorch)
         """
         super().__init__("detector", config)
-        self.model_path = config["model"]
+        self.model_base = config["model"]
         self.frame_skip = config.get("frame_skip", 1)  # Default to 1 frame
-        self.use_tensorrt = config.get("use_tensorrt", False)
-        self.tensorrt_engine = config.get("tensorrt_engine", None)
-        self.logger.warning("Initialized detector worker with model: %s", self.model_path)
+        self.backend = config.get("backend", "pytorch")
+        self.logger.warning("Initialized detector worker with model base: %s", self.model_base)
 
-        # Initialize YOLO model
-        if self.use_tensorrt:
-            if self.tensorrt_engine and os.path.exists(self.tensorrt_engine):
-                # Load existing TensorRT engine
-                self.logger.warning("Loading TensorRT engine from: %s", self.tensorrt_engine)
-                self.model = YOLO(self.tensorrt_engine)
-                self.logger.warning("Successfully loaded TensorRT engine")
-            else:
+        # Determine model path based on backend
+        if self.backend == "tensorrt":
+            model_path = f"{self.model_base}.engine"
+            if not os.path.exists(model_path):
                 # Convert PyTorch model to TensorRT
                 self.logger.warning("Converting PyTorch model to TensorRT...")
-                self.model = YOLO(self.model_path)
-                if self.tensorrt_engine:
-                    # Save engine to specified path
-                    self.model.export(format="engine", device=0, half=True, workspace=4, verbose=False)
-                    self.logger.warning("Saved TensorRT engine to: %s", self.tensorrt_engine)
-                else:
-                    # Use default engine path
-                    engine_path = str(Path(self.model_path).with_suffix(".engine"))
-                    self.logger.warning("Saved TensorRT engine to: %s", engine_path)
-        else:
+                pytorch_path = f"{self.model_base}.pt"
+                model = YOLO(pytorch_path, task="detect")
+                # Save engine to default path
+                model.export(format="engine", device=0, half=True, workspace=4, verbose=False)
+                self.logger.warning("Saved TensorRT engine to: %s", model_path)
+        elif self.backend == "onnx":
+            model_path = f"{self.model_base}.onnx"
+            if not os.path.exists(model_path):
+                # Convert PyTorch model to ONNX
+                self.logger.warning("Converting PyTorch model to ONNX...")
+                pytorch_path = f"{self.model_base}.pt"
+                model = YOLO(pytorch_path, task="detect")
+                # Save ONNX to default path
+                model.export(format="onnx", verbose=False)
+                self.logger.warning("Saved ONNX model to: %s", model_path)
+        elif self.backend == "pytorch":
             # Use regular PyTorch model
-            self.model = YOLO(self.model_path)
-            self.logger.warning("Successfully loaded YOLO model")
+            model_path = f"{self.model_base}.pt"
+        else:
+            # Raise exception for unknown backend
+            raise ValueError(f"Unknown backend: {self.backend}. Supported backends are: pytorch, tensorrt, onnx")
+
+        # Load the model (same syntax for all backends)
+        self.logger.warning("Loading %s model from: %s", self.backend, model_path)
+        self.model = YOLO(model_path, task="detect")
+        self.logger.warning("Successfully loaded %s model", self.backend)
 
         # Warm up model with blank image
         self.logger.warning("Warming up model with blank image...")
