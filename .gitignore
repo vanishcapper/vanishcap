@@ -20,13 +20,7 @@ build/
 *.swo
 
 # PyTorch model files
-*.pt
-*.pth
-*.ckpt
-*.bin
-*.onnx
-*.h5
-*.hdf5
+assets
 
 # Logs and databases
 *.log
@@ -40,4 +34,4 @@ build/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db 
+Thumbs.db

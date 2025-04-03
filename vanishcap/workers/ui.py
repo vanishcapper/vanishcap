@@ -66,6 +66,23 @@ class Ui(Worker):
         self.worker_profiles = {}  # Maps worker name to last task time
         self.profile_font = pygame.font.Font(None, 20)  # Small font for profiling text
 
+    def _denormalize_coordinates(self, x: float, y: float, width: float, height: float) -> tuple[int, int]:
+        """Convert normalized coordinates [-1, 1] back to pixel coordinates.
+
+        Args:
+            x: Normalized x coordinate [-1, 1]
+            y: Normalized y coordinate [-1, 1]
+            width: Frame width in pixels
+            height: Frame height in pixels
+
+        Returns:
+            tuple[int, int]: Pixel coordinates
+        """
+        # Convert from [-1, 1] to pixel coordinates
+        pixel_x = int((x + 1) * width / 2)
+        pixel_y = int((y + 1) * height / 2)
+        return pixel_x, pixel_y
+
     def _task(self) -> None:  # pylint: disable=too-many-locals
         """Run one iteration of the UI loop."""
         # Handle pygame events
@@ -112,19 +129,37 @@ class Ui(Worker):
 
         # Draw detection boxes
         for detection in self.current_detections:
-            bbox = detection["bbox"]
+            # Get normalized bbox coordinates
+            norm_x1, norm_y1, norm_x2, norm_y2 = detection["bbox"]
+
+            # Convert normalized coordinates to pixel coordinates
+            x1, y1 = self._denormalize_coordinates(norm_x1, norm_y1, orig_width, orig_height)
+            x2, y2 = self._denormalize_coordinates(norm_x2, norm_y2, orig_width, orig_height)
+
             # Scale bbox coordinates to match scaled frame size
-            x1, y1, x2, y2 = [int(coord) for coord in bbox]
             x1 = int(x1 * self.display_config["window_size"][0] / orig_width)
             y1 = int(y1 * self.display_config["window_size"][1] / orig_height)
             x2 = int(x2 * self.display_config["window_size"][0] / orig_width)
             y2 = int(y2 * self.display_config["window_size"][1] / orig_height)
+
+            # Draw rectangle
             pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2 - x1, y2 - y1), 2)
 
             # Draw label
             label = f"{detection['class_name']} ({detection['confidence']:.2f})"
             text = self.profile_font.render(label, True, (0, 255, 0))
             self.screen.blit(text, (x1, y1 - 20))
+
+            # Log detection drawing
+            self.logger.info(
+                "Drawing %s (%.2f) at normalized (%.2f, %.2f) - (%.2f, %.2f)",
+                detection["class_name"],
+                detection["confidence"],
+                norm_x1,
+                norm_y1,
+                norm_x2,
+                norm_y2,
+            )
 
         # Draw frame number in top right
         frame_text = self.profile_font.render(f"Frame: {frame_number}", True, (255, 255, 255))
@@ -156,18 +191,6 @@ class Ui(Worker):
             self.current_frame_event = event
         elif event.event_name == "detection":
             self.current_detections = event.data
-            # Log detection drawing
-            for det in self.current_detections:
-                x1, y1, x2, y2 = det["bbox"]
-                self.logger.info(
-                    "Drawing %s (%.2f) at pixels (%.1f, %.1f) - (%.1f, %.1f)",
-                    det["class_name"],
-                    det["confidence"],
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                )
         elif event.event_name == "worker_profile":
             # Update profiling data for the worker
             worker_name = event.worker_name

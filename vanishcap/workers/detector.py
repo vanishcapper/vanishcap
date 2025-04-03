@@ -78,6 +78,23 @@ class Detector(Worker):
         self.frame_count = 0
         self.latest_frame_event = None
 
+    def _normalize_coordinates(self, x: float, y: float, width: float, height: float) -> tuple[float, float]:
+        """Normalize coordinates to [-1, 1] range.
+
+        Args:
+            x: X coordinate in pixels
+            y: Y coordinate in pixels
+            width: Frame width in pixels
+            height: Frame height in pixels
+
+        Returns:
+            tuple[float, float]: Normalized (x, y) coordinates in [-1, 1] range
+        """
+        # Convert to [-1, 1] range
+        norm_x = (x / width) * 2 - 1
+        norm_y = (y / height) * 2 - 1
+        return norm_x, norm_y
+
     def __call__(self, event: Event) -> None:
         """Handle incoming events.
 
@@ -93,7 +110,7 @@ class Detector(Worker):
         else:
             self.logger.debug("Received unknown event: %s", event.event_name)
 
-    def _task(self) -> None:
+    def _task(self) -> None:  # pylint: disable=too-many-locals
         """Run one iteration of the detector loop."""
         # Skip if no frame available
         if self.latest_frame_event is None:
@@ -109,6 +126,9 @@ class Detector(Worker):
         # Run detection with verbose=False to suppress YOLO's default logging
         results = self.model(frame, verbose=False)
 
+        # Get frame dimensions
+        height, width = frame.shape[:2]
+
         # Process results
         detections = []
         for r in results:
@@ -120,19 +140,34 @@ class Detector(Worker):
                 class_id = int(box.cls[0])
                 class_name = self.model.names[class_id]
 
+                # Normalize bounding box coordinates to [-1, 1] range
+                norm_x1, norm_y1 = self._normalize_coordinates(x1, y1, width, height)
+                norm_x2, norm_y2 = self._normalize_coordinates(x2, y2, width, height)
+
+                # Calculate center point in normalized coordinates
+                center_x = (norm_x1 + norm_x2) / 2
+                center_y = (norm_y1 + norm_y2) / 2
+
                 # Log detection details
                 self.logger.info(
-                    "Detected %s (%.2f) at (%.1f, %.1f) - (%.1f, %.1f)",
+                    "Detected %s (%.2f) at (%.2f, %.2f) - (%.2f, %.2f)",
                     class_name,
                     confidence,
-                    x1,
-                    y1,
-                    x2,
-                    y2,
+                    norm_x1,
+                    norm_y1,
+                    norm_x2,
+                    norm_y2,
                 )
 
                 detections.append(
-                    {"bbox": [x1, y1, x2, y2], "confidence": confidence, "class_id": class_id, "class_name": class_name}
+                    {
+                        "bbox": [norm_x1, norm_y1, norm_x2, norm_y2],
+                        "confidence": confidence,
+                        "class_id": class_id,
+                        "class_name": class_name,
+                        "x": center_x,
+                        "y": center_y,
+                    }
                 )
 
         # Emit detection event
