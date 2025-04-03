@@ -6,7 +6,7 @@ import traceback
 
 import click
 
-from vanishcap.controller import Controller
+from vanishcap.controller import Controller, InitializationError
 from vanishcap.utils.logging import get_worker_logger
 
 
@@ -57,6 +57,11 @@ def cli(config: str):
             # Small sleep to prevent CPU spinning
             time.sleep(0.001)  # 1ms sleep
 
+    except InitializationError as e:
+        logger.error("Initialization failed: %s", e)
+        logger.error("Stack trace:")
+        logger.error(traceback.format_exc())
+        raise
     except Exception as e:
         logger.error("Error in main loop: %s", e)
         logger.error("Stack trace:")

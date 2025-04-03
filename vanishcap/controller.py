@@ -2,15 +2,18 @@
 
 import importlib
 import inspect
-import subprocess
-import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Set
 
 from omegaconf import OmegaConf
 from vanishcap.event import Event
 from vanishcap.worker import Worker
 from vanishcap.utils.logging import get_worker_logger
+from vanishcap.utils.wifi import WifiManager, WifiError
+
+
+class InitializationError(Exception):
+    """Exception raised when controller initialization fails."""
 
 
 class Controller:
@@ -25,6 +28,8 @@ class Controller:
         Raises:
             FileNotFoundError: If the config file doesn't exist
             ValueError: If the config is invalid
+            WifiError: If WiFi initialization fails
+            InitializationError: If any other initialization fails
         """
         # Load config first to get controller's log level
         self.config = self._load_config(config_path)
@@ -35,22 +40,16 @@ class Controller:
         self.logger = get_worker_logger("controller", log_level)
         self.logger.warning("Initializing controller with config: %s", config_path)
 
-        # Store previous WiFi state if needed
-        self.previous_wifi: Optional[Tuple[str, str]] = None
-        self.wifi_device: Optional[str] = None
+        # Initialize WiFi manager if not in offline mode
+        self.wifi_manager = None
         if not controller_config.get("offline", False):
-            wifi_config = controller_config.get("wifi", {})
-            if wifi_config.get("reconnect", False):
-                # Get current WiFi info and store both the connection and device
-                wifi_info = self._get_current_wifi()
-                if wifi_info:
-                    self.previous_wifi = wifi_info
-                    self.wifi_device = wifi_info[1]  # Store the device name
-
-            # Connect to specified WiFi if configured
-            connect_config = wifi_config.get("connect", {})
-            if connect_config.get("ssid"):
-                self._connect_wifi(connect_config["ssid"], connect_config.get("password", ""))
+            try:
+                wifi_config = controller_config.get("wifi", {})
+                wifi_config["log_level"] = log_level  # Pass controller's log level
+                self.wifi_manager = WifiManager(wifi_config)
+            except WifiError as e:
+                self.logger.error("WiFi initialization failed: %s", e)
+                raise InitializationError(f"WiFi initialization failed: {e}") from e
         else:
             self.logger.warning("Running in offline mode - skipping WiFi management")
 
@@ -58,93 +57,16 @@ class Controller:
         self.event_routes: Dict[str, Set[str]] = {}
 
         # Initialize workers in dependency order
-        self._init_workers()
+        try:
+            self._init_workers()
+        except Exception as e:
+            self.logger.error("Failed to initialize workers: %s", e)
+            raise InitializationError(f"Failed to initialize workers: {e}") from e
 
         # Build event routing map
         self._build_event_routes()
 
         self.logger.warning("Controller initialized")
-
-    def _get_current_wifi(self) -> Optional[Tuple[str, str]]:
-        """Get the currently connected WiFi SSID and interface.
-
-        Returns:
-            Optional[Tuple[str, str]]: Tuple of (ssid, interface) if connected, None otherwise
-        """
-        try:
-            # Get list of WiFi interfaces with terse output
-            result = subprocess.run(
-                ["nmcli", "--terse", "--fields", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if result.returncode != 0:
-                self.logger.error("Failed to get device status: %s", result.stderr)
-                return None
-
-            # Parse terse output (DEVICE:TYPE:STATE:CONNECTION)
-            for line in result.stdout.splitlines():
-                device, dev_type, state, connection = line.split(":")
-                if dev_type.lower() == "wifi" and state.lower() == "connected":
-                    if connection and connection != "off/any":
-                        return (connection, device)
-            return None
-        except subprocess.CalledProcessError as e:
-            self.logger.error("Failed to get WiFi status: %s", e)
-            return None
-        except Exception as e:  # pylint: disable=broad-except
-            self.logger.error("Error getting WiFi status: %s", e)
-            return None
-
-    def _connect_wifi(self, ssid: str, password: str = "") -> bool:
-        """Connect to a WiFi network.
-
-        Args:
-            ssid: SSID to connect to
-            password: Optional password for the network
-
-        Returns:
-            bool: True if connection successful, False otherwise
-        """
-        try:
-            # Use stored WiFi device or default to wlan0
-            device = self.wifi_device or "wlp92s0"
-
-            # First, try to disconnect from current network
-            result = subprocess.run(
-                ["nmcli", "device", "disconnect", device], capture_output=True, text=True, check=False
-            )
-            if result.returncode != 0:
-                self.logger.warning("Failed to disconnect from current network: %s", result.stderr)
-            time.sleep(2)  # Wait for disconnect
-
-            # Connect to new network
-            if password:
-                cmd = ["nmcli", "device", "wifi", "connect", ssid, "password", password]
-            else:
-                cmd = ["nmcli", "device", "wifi", "connect", ssid]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                self.logger.info("Successfully connected to WiFi network: %s", ssid)
-                return True
-
-            self.logger.error("Failed to connect to WiFi: %s", result.stderr)
-            return False
-        except subprocess.CalledProcessError as e:
-            self.logger.error("Failed to connect to WiFi: %s", e)
-            return False
-        except Exception as e:  # pylint: disable=broad-except
-            self.logger.error("Error connecting to WiFi: %s", e)
-            return False
-
-    def _reconnect_previous_wifi(self) -> None:
-        """Reconnect to the previously connected WiFi network."""
-        if self.previous_wifi:
-            ssid = self.previous_wifi[0]  # Only use the SSID
-            self.logger.info("Reconnecting to previous WiFi network: %s", ssid)
-            self._connect_wifi(ssid)
 
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         """Load configuration from file.
@@ -342,6 +264,6 @@ class Controller:
         self.stop()
 
         # Restore previous WiFi connection if needed
-        if self.previous_wifi and not self.config.get("controller", {}).get("offline", False):
+        if self.wifi_manager and not self.config.get("controller", {}).get("offline", False):
             self.logger.info("Restoring previous WiFi connection")
-            self._reconnect_previous_wifi()
+            self.wifi_manager.reconnect_previous()
