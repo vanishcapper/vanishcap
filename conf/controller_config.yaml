@@ -1,18 +1,18 @@
 # Controller configuration with multiple workers
 controller:
   log_level: INFO # Log level for the controller itself
-  offline: true # Whether to run in offline mode (no WiFi management)
+  offline: false # Whether to run in offline mode (no WiFi management)
   wifi:
     connect:
-      ssid: "TELLO-XXXXXX" # Optional: SSID to connect to before starting workers
+      ssid: "veil" # Optional: SSID to connect to before starting workers
       password: "" # Optional: Password for the SSID
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
 video:
-  source: 0
+  source: "udp://@0.0.0.0:11111" # Tello video stream
   log_level: WARNING # Show frame acquisition info
   profile_window: 1.0 # Show max task time over last second
-  depends_on: ["detector"] # Wait for detector to start
+  depends_on: ["detector", "drone"] # Wait for detector and drone to start
 
 detector:
   model: yolov5nu # Base model path without extension
@@ -33,7 +33,7 @@ navigator:
     - detector: detection # Receive detection events from detector
 
 drone:
-  offline: true # Whether to run in offline mode (no WiFi management)
+  offline: false # Whether to run in offline mode (no WiFi management)
   ip: "192.168.10.1" # Default Tello IP address
   max_speed: 5 # Maximum speed in cm/s
   follow_distance: 100 # Distance to maintain from target in cm

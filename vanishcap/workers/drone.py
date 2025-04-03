@@ -43,7 +43,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         if not self.offline:
             self.drone.connect()
             self.logger.info("Connected to drone at IP: %s", config.get("ip", "192.168.10.1"))
-            self._dispatch_command("set_speed", self.max_speed)
+            self._dispatch_command("streamon")
         else:
             self.logger.warning("Running in offline mode - skipping drone connection")
 
@@ -169,6 +169,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         if self.is_flying:
             self.logger.debug("Landing drone")
             self._dispatch_command("land")
-        if not self.offline:
-            self.logger.debug("Ending drone connection")
-            self._dispatch_command("end")
+            self.is_flying = False
+        self.logger.debug("Ending drone connection")
+        self._dispatch_command("end")

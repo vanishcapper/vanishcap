@@ -37,10 +37,15 @@ class Controller:
 
         # Store previous WiFi state if needed
         self.previous_wifi: Optional[Tuple[str, str]] = None
+        self.wifi_device: Optional[str] = None
         if not controller_config.get("offline", False):
             wifi_config = controller_config.get("wifi", {})
             if wifi_config.get("reconnect", False):
-                self.previous_wifi = self._get_current_wifi()
+                # Get current WiFi info and store both the connection and device
+                wifi_info = self._get_current_wifi()
+                if wifi_info:
+                    self.previous_wifi = wifi_info
+                    self.wifi_device = wifi_info[1]  # Store the device name
 
             # Connect to specified WiFi if configured
             connect_config = wifi_config.get("connect", {})
@@ -67,22 +72,30 @@ class Controller:
             Optional[Tuple[str, str]]: Tuple of (ssid, interface) if connected, None otherwise
         """
         try:
-            # Get all wireless interfaces
-            interfaces = subprocess.check_output(["iwconfig"], text=True)
+            # Get list of WiFi interfaces with terse output
+            result = subprocess.run(
+                ["nmcli", "--terse", "--fields", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                self.logger.error("Failed to get device status: %s", result.stderr)
+                return None
 
-            # Find the first connected interface
-            for line in interfaces.split("\n"):
-                if "ESSID" in line:
-                    # Extract interface and SSID
-                    interface = line.split()[0]  # pylint: disable=unused-variable
-                    ssid = line.split('"')[1]
-                    if ssid != "off/any":
-                        return (ssid, interface)
+            # Parse terse output (DEVICE:TYPE:STATE:CONNECTION)
+            for line in result.stdout.splitlines():
+                device, dev_type, state, connection = line.split(":")
+                if dev_type.lower() == "wifi" and state.lower() == "connected":
+                    if connection and connection != "off/any":
+                        return (connection, device)
+            return None
         except subprocess.CalledProcessError as e:
             self.logger.error("Failed to get WiFi status: %s", e)
+            return None
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error("Error getting WiFi status: %s", e)
-        return None
+            return None
 
     def _connect_wifi(self, ssid: str, password: str = "") -> bool:
         """Connect to a WiFi network.
@@ -95,8 +108,15 @@ class Controller:
             bool: True if connection successful, False otherwise
         """
         try:
+            # Use stored WiFi device or default to wlan0
+            device = self.wifi_device or "wlp92s0"
+
             # First, try to disconnect from current network
-            subprocess.run(["nmcli", "device", "disconnect", "wlan0"], check=False)
+            result = subprocess.run(
+                ["nmcli", "device", "disconnect", device], capture_output=True, text=True, check=False
+            )
+            if result.returncode != 0:
+                self.logger.warning("Failed to disconnect from current network: %s", result.stderr)
             time.sleep(2)  # Wait for disconnect
 
             # Connect to new network
@@ -320,3 +340,8 @@ class Controller:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit."""
         self.stop()
+
+        # Restore previous WiFi connection if needed
+        if self.previous_wifi and not self.config.get("controller", {}).get("offline", False):
+            self.logger.info("Restoring previous WiFi connection")
+            self._reconnect_previous_wifi()

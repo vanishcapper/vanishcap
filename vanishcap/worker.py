@@ -178,9 +178,7 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
         Args:
             event: Event to handle
         """
-        self.logger.debug("Worker %s dispatching event %s", self.name, event.event_name)
         self._event_queue.put(event)
-        self.logger.debug("Worker %s event %s queued", self.name, event.event_name)
 
     def _emit(self, event: Event) -> None:
         """Emit an event to the Controller.
@@ -189,9 +187,7 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
             event: Event to emit
         """
         if self._controller is not None:
-            self.logger.debug("Worker %s emitting event %s", self.name, event.event_name)
             self._controller(event)
-            self.logger.debug("Worker %s event %s routed", self.name, event.event_name)
 
     @abstractmethod
     def __call__(self, event: Event) -> None:
