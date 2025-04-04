@@ -10,6 +10,7 @@ controller:
 
 video:
   source: "udp://@0.0.0.0:11111" # Tello video stream
+  save_path: "/tmp/vanishcap_recording.mp4" # Path to save the video
   log_level: WARNING # Show frame acquisition info
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["detector", "drone"] # Wait for detector and drone to start
