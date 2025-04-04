@@ -198,7 +198,7 @@ class Controller:
 
     def start(self) -> None:
         """Start all workers."""
-        from vanishcap.workers.ui import Ui  # pylint: disable=import-outside-toplevel  # Import here to avoid circular imports
+        from vanishcap.workers.ui import Ui  # pylint: disable=import-outside-toplevel
 
         # Find UI worker if it exists
         ui_worker = None

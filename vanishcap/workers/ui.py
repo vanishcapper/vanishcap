@@ -1,4 +1,5 @@
 """Worker for displaying video frames and detection results."""
+
 # pylint: disable=wrong-import-position
 
 import os
@@ -38,7 +39,7 @@ class Ui(Worker):
             "window_size": config.get("window_size", (800, 600)),
             "target_fps": config.get("fps", 30),
             "frame_time": 1.0 / config.get("fps", 30),
-            "last_frame_time": 0
+            "last_frame_time": 0,
         }
         self.logger.warning(
             "Initialized UI worker with window size: %s and target FPS: %s",
@@ -87,8 +88,10 @@ class Ui(Worker):
         """Run one iteration of the UI loop."""
         # Handle pygame events
         for event in pygame.event.get():
-            if not (event.type == pygame.QUIT or  # pylint: disable=no-member
-                   (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE)):  # pylint: disable=no-member
+            if not (
+                event.type == pygame.QUIT  # pylint: disable=no-member
+                or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE)
+            ):  # pylint: disable=no-member
                 continue
             self.logger.warning("Received quit event")
             self._emit(Event(self.name, "stop", None))
@@ -103,8 +106,10 @@ class Ui(Worker):
             return
 
         # Update display if we have a frame and enough time has passed
-        if (self.current_frame_event is None or
-            time.time() - self.display_config["last_frame_time"] < self.display_config["frame_time"]):
+        if (
+            self.current_frame_event is None
+            or time.time() - self.display_config["last_frame_time"] < self.display_config["frame_time"]
+        ):
             return
 
         # Extract frame data
@@ -170,9 +175,7 @@ class Ui(Worker):
         # Draw profiling data
         y = 10
         for worker_name, task_time in self.worker_profiles.items():
-            text = self.profile_font.render(
-                f"{worker_name}: {task_time*1000:.1f}ms", True, (255, 255, 255)
-            )
+            text = self.profile_font.render(f"{worker_name}: {task_time*1000:.1f}ms", True, (255, 255, 255))
             self.screen.blit(text, (10, y))
             y += 20
 
