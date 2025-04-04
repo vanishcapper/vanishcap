@@ -3,9 +3,10 @@
 import subprocess
 import sys
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from vanishcap.utils.logging import get_worker_logger
+from vanishcap.event import Event
 
 
 class WifiError(Exception):
@@ -22,32 +23,49 @@ class WifiManager:
 
         Args:
             config: Configuration dictionary containing:
-                - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-                - reconnect: Whether to store and restore previous WiFi connection (default: false)
-                - connect: Optional dict containing:
+                - connect: Optional dictionary with:
                     - ssid: SSID to connect to
-                    - password: Optional password for the network
-
-        Raises:
-            WifiError: If WiFi initialization fails
+                    - password: Password for the SSID
+                - reconnect: Whether to reconnect to previous SSID after workers finish
+                - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
+        # Set up logging
         self.logger = get_worker_logger("wifi", config.get("log_level", "WARNING"))
         self.previous_wifi: Optional[Tuple[str, str]] = None
         self.wifi_device: Optional[str] = None
 
-        # Handle WiFi configuration
-        if not config.get("offline", False):
-            if config.get("reconnect", False):
-                # Store current WiFi info if reconnection is enabled
-                self.store_current_wifi()
+        # Store configuration
+        self.config = config
+        self.previous_ssid: Optional[str] = None
 
-            # Connect to specified WiFi if configured
-            connect_config = config.get("connect", {})
-            if connect_config.get("ssid"):
-                if not self.connect(connect_config["ssid"], connect_config.get("password", "")):
-                    raise WifiError(f"Failed to connect to WiFi network: {connect_config['ssid']}")
+        # Connect to WiFi if configured
+        if "connect" in config:
+            if not self.scan():
+                self.logger.error("Failed to scan for WiFi networks")
+                raise WifiError("Failed to scan for WiFi networks")
+            if not self.connect(config["connect"]["ssid"], config["connect"].get("password", "")):
+                self.logger.error("Failed to connect to WiFi network: %s", config["connect"]["ssid"])
+                raise WifiError(f"Failed to connect to WiFi network: {config['connect']['ssid']}")
         else:
             self.logger.warning("Running in offline mode - skipping WiFi management")
+
+    def scan(self) -> bool:
+        """Scan for available WiFi networks.
+
+        Returns:
+            True if scan completed successfully, False otherwise
+        """
+        try:
+            self.logger.warning("Scanning for WiFi networks...")
+            subprocess.run(
+                ["nmcli", "device", "wifi", "list", "--rescan", "yes"],
+                check=True,
+            )
+            self.logger.info("WiFi scan completed successfully")
+            return True
+        except subprocess.CalledProcessError:
+            self.logger.error("Failed to scan for WiFi networks")
+            return False
 
     def _find_wifi_device(self) -> Optional[str]:
         """Find a valid WiFi device.
@@ -179,3 +197,13 @@ class WifiManager:
             ssid = self.previous_wifi[0]  # Only use the SSID
             self.logger.info("Reconnecting to previous WiFi network: %s", ssid)
             self.connect(ssid)
+
+    def __enter__(self) -> "WifiManager":
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context manager."""
+        if self.previous_wifi and self.previous_wifi[0] != self.get_current_wifi()[0]:
+            self.logger.info("Reconnecting to previous WiFi network")
+            self.connect(self.previous_wifi[0])

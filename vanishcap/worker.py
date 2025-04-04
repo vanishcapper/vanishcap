@@ -101,8 +101,6 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
 
         # Get and log max time
         max_time = self._get_max_task_time()
-        self.logger.debug("Worker %s max task execution time: %.3fs", self.name, max_time)
-
         # Emit profiling event with max time
         self._emit(Event(worker_name=self.name, event_name="worker_profile", data={"task_time": max_time}))
 
