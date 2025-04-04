@@ -40,6 +40,12 @@ class WifiManager:
 
         # Connect to WiFi if configured
         if "connect" in config:
+            # Try connecting first
+            if self.connect(config["connect"]["ssid"], config["connect"].get("password", "")):
+                return
+
+            # If initial connect failed, scan and try again
+            self.logger.warning("Initial connect failed, scanning and retrying...")
             if not self.scan():
                 self.logger.error("Failed to scan for WiFi networks")
                 raise WifiError("Failed to scan for WiFi networks")
