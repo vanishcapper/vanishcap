@@ -36,9 +36,12 @@ navigator:
 drone:
   offline: false # Whether to run in offline mode (no WiFi management)
   ip: "192.168.10.1" # Default Tello IP address
-  max_speed: 100 # Maximum speed in cm/s
+  max_linear_velocity: 80 # Maximum linear velocity in cm/s
+  max_angular_velocity: 90 # Maximum angular velocity in deg/s
   follow_distance: 100 # Distance to maintain from target in cm
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
+  field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
+  auto_takeoff: true # Whether to take off automatically without waiting for a target
   log_level: DEBUG
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start

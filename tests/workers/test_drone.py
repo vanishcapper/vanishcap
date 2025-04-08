@@ -122,7 +122,8 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
     def test_initialization(self):
         """Test initialization of drone worker."""
         drone = Drone(self.config)
-        self.assertEqual(drone.max_speed, 50)
+        self.assertEqual(drone.max_linear_velocity, 50)
+        self.assertEqual(drone.max_angular_velocity, 50)
         self.assertEqual(drone.follow_distance, 100)
         self.assertEqual(drone.movement_threshold, 0.10)
         self.assertEqual(drone.offline, False)
@@ -143,7 +144,8 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         """Test initialization with default values."""
         config = {"ip": "192.168.10.1"}
         drone = Drone(config)
-        self.assertEqual(drone.max_speed, 50)
+        self.assertEqual(drone.max_linear_velocity, 50)
+        self.assertEqual(drone.max_angular_velocity, 50)
         self.assertEqual(drone.follow_distance, 100)
         self.assertEqual(drone.movement_threshold, 0.10)
         self.assertEqual(drone.offline, False)
@@ -173,8 +175,11 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         """Test target following logic."""
         drone = Drone(self.config)
         drone.current_target = {"x": 0.4, "y": -0.4, "confidence": 1.0}
+        drone.current_target["processed"] = False  # Ensure target is not processed
         drone._follow_target()
-        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 20, 0, 20)
+        # Expected: fb_rc and yaw_rc are calculated and sent together
+        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 40, 0, 100)
+        self.assertTrue(drone.current_target["processed"]) # Ensure target is processed
 
     def test_follow_target_threshold(self):
         """Test movement threshold in target following."""
