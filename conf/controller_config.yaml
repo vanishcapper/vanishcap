@@ -1,10 +1,11 @@
 # Controller configuration with multiple workers
 controller:
   log_level: INFO # Log level for the controller itself
+  log_file: "/tmp/vanishcap.log" # Optional: Path to log file
   offline: false # Whether to run in offline mode (no WiFi management)
   wifi:
     connect:
-      ssid: "veil" # Optional: SSID to connect to before starting workers
+      ssid: "t1" # Optional: SSID to connect to before starting workers
       password: "" # Optional: Password for the SSID
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 

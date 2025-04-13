@@ -37,7 +37,8 @@ class Controller:
         # Initialize logger with config's log level
         controller_config = self.config.get("controller", {})
         log_level = controller_config.get("log_level", "WARNING")
-        self.logger = get_worker_logger("controller", log_level)
+        log_file = controller_config.get("log_file")  # Will be None if not in config
+        self.logger = get_worker_logger("controller", log_level, log_file)
         self.logger.warning("Initializing controller with config: %s", config_path)
 
         # Initialize WiFi manager if not in offline mode
