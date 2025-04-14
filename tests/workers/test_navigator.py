@@ -34,7 +34,7 @@ class TestNavigator(unittest.TestCase):
         self.assertEqual(self.navigator.name, "navigator")
 
     def test_handle_detection_event(self):
-        """Test handling of detection events."""
+        """Test handling a detection event."""
         # Create test detections
         detections = [
             {"class_name": "person", "bbox": [0, 0, 100, 100], "confidence": 0.9, "x": 0.5, "y": 0.5},
@@ -42,8 +42,8 @@ class TestNavigator(unittest.TestCase):
         ]
 
         # Create and handle detection event
-        event = Event("detector", "detection", detections)
-        self.navigator(event)
+        detection_event = Event("detector", "detection", detections, frame_number=1)
+        self.navigator(detection_event)
 
         # Run task to process detections
         self.navigator._task()
@@ -58,7 +58,7 @@ class TestNavigator(unittest.TestCase):
         self.assertEqual(emitted_event.data["confidence"], 0.9)
 
     def test_select_largest_target(self):
-        """Test selection of largest target from multiple detections."""
+        """Test selecting the largest target from multiple detections."""
         # Create test detections with different sizes
         detections = [
             {"class_name": "person", "bbox": [0, 0, 100, 100], "confidence": 0.9, "x": 0.5, "y": 0.5},  # Area: 10000
@@ -66,8 +66,8 @@ class TestNavigator(unittest.TestCase):
         ]
 
         # Create and handle detection event
-        event = Event("detector", "detection", detections)
-        self.navigator(event)
+        detection_event = Event("detector", "detection", detections, frame_number=1)
+        self.navigator(detection_event)
 
         # Run task to process detections
         self.navigator._task()
@@ -81,13 +81,13 @@ class TestNavigator(unittest.TestCase):
         self.assertEqual(emitted_event.data["y"], 0.6)
 
     def test_no_target_detections(self):
-        """Test handling of detections without target class."""
+        """Test handling detection event with no targets of the specified class."""
         # Create test detections without target class
         detections = [{"class_name": "car", "bbox": [0, 0, 100, 100], "confidence": 0.9, "x": 0.5, "y": 0.5}]
 
         # Create and handle detection event
-        event = Event("detector", "detection", detections)
-        self.navigator(event)
+        detection_event = Event("detector", "detection", detections, frame_number=1)
+        self.navigator(detection_event)
 
         # Run task to process detections
         self.navigator._task()
@@ -106,7 +106,7 @@ class TestNavigator(unittest.TestCase):
     def test_unknown_event(self):
         """Test handling of unknown events."""
         # Create unknown event
-        event = Event("unknown", "unknown", {})
+        event = Event("unknown", "unknown", {}, frame_number=1)
         self.navigator(event)
 
         # Run task to process detections

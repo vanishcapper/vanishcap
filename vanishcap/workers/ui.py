@@ -90,8 +90,8 @@ class Ui(Worker):
         for event in pygame.event.get():
             if not (
                 event.type == pygame.QUIT  # pylint: disable=no-member
-                or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE)
-            ):  # pylint: disable=no-member
+                or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE)  # pylint: disable=no-member
+            ):
                 continue
             self.logger.warning("Received quit event")
             self._emit(Event(self.name, "stop", None))
@@ -113,8 +113,8 @@ class Ui(Worker):
             return
 
         # Extract frame data
-        frame = self.current_frame_event.data["frame"]
-        frame_number = self.current_frame_event.data["frame_number"]
+        frame = self.current_frame_event.data
+        frame_number = self.current_frame_event.frame_number
 
         # Log which frame we're displaying
         self.logger.info("Displaying frame %d", frame_number)

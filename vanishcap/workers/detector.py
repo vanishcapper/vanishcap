@@ -106,7 +106,7 @@ class Detector(Worker):
             if self.frame_count % self.frame_skip == 0:
                 # Store the full event
                 self.latest_frame_event = event
-                self.logger.info("Received frame %d", event.data["frame_number"])
+                self.logger.info("Received frame %d", event.frame_number)
         else:
             self.logger.debug("Received unknown event: %s", event.event_name)
 
@@ -117,8 +117,8 @@ class Detector(Worker):
             return
 
         # Extract frame data
-        frame = self.latest_frame_event.data["frame"]
-        frame_number = self.latest_frame_event.data["frame_number"]
+        frame = self.latest_frame_event.data
+        frame_number = self.latest_frame_event.frame_number
 
         # Log which frame we're processing
         self.logger.info("Processing frame %d", frame_number)
@@ -170,8 +170,8 @@ class Detector(Worker):
                     }
                 )
 
-        # Emit detection event
-        self._emit(Event(self.name, "detection", detections))
+        # Emit detection event with frame number
+        self._emit(Event(self.name, "detection", detections, frame_number=frame_number))
 
         # Clear the frame event after processing
         self.latest_frame_event = None
@@ -191,14 +191,14 @@ class Detector(Worker):
                 while True:
                     old_event = self._event_queue.get_nowait()
                     if old_event.event_name == "frame":
-                        self.logger.debug("Discarding old frame event %d", old_event.data["frame_number"])
+                        self.logger.debug("Discarding old frame event %d", old_event.frame_number)
             except queue.Empty:
                 pass
 
             # Add the new frame event
-            self.logger.debug("Worker %s dispatching frame event %d", self.name, event.data["frame_number"])
+            self.logger.debug("Worker %s dispatching frame event %d", self.name, event.frame_number)
             self._event_queue.put(event)
-            self.logger.debug("Worker %s frame event %d queued", self.name, event.data["frame_number"])
+            self.logger.debug("Worker %s frame event %d queued", self.name, event.frame_number)
         else:
             # Use default queue behavior for non-frame events
             self.logger.debug("Worker %s dispatching event %s", self.name, event.event_name)

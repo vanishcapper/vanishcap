@@ -15,22 +15,34 @@ class Navigator(Worker):
 
         Args:
             config: Configuration dictionary containing:
-                - target_class: Name of the class to track (e.g. "person", "car")
+                - target_class: Class name to track
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
         super().__init__("navigator", config)
         self.target_class = config["target_class"]
-        self.logger.info("Initialized navigator worker with target class: %s", self.target_class)
+        self.logger.warning("Initialized navigator worker with target class: %s", self.target_class)
 
         # Initialize state
         self.detection_queue = queue.Queue()
+
+    def __call__(self, event: Event) -> None:
+        """Handle incoming events.
+
+        Args:
+            event: Event to handle
+        """
+        if event.event_name == "detection":
+            self.detection_queue.put((event.data, event.frame_number))
+            self.logger.debug("Received detection event with %d detections", len(event.data))
+        else:
+            self.logger.debug("Received unknown event: %s", event.event_name)
 
     def _task(self) -> None:
         """Run one iteration of the navigator loop."""
         # Get detections from queue
         try:
-            detections = self.detection_queue.get_nowait()
-            self.logger.debug("Processing %d detections", len(detections))
+            detections, frame_number = self.detection_queue.get_nowait()
+            self.logger.info("Processing frame %d with %d detections", frame_number, len(detections))
         except queue.Empty:
             return
 
@@ -48,7 +60,7 @@ class Navigator(Worker):
             target_y = target["y"]
             self.logger.debug("Target position: (%.2f, %.2f)", target_x, target_y)
 
-            # Emit target event with normalized coordinates
+            # Emit target event with normalized coordinates and frame number
             self._emit(
                 Event(
                     self.name,
@@ -58,23 +70,12 @@ class Navigator(Worker):
                         "y": target_y,
                         "confidence": target["confidence"],
                     },
+                    frame_number=frame_number,
                 )
             )
             self.logger.debug("Emitted target event with position (%.2f, %.2f)", target_x, target_y)
         else:
             self.logger.debug("No targets of class %s found in frame", self.target_class)
-
-    def __call__(self, event: Event) -> None:
-        """Handle incoming events.
-
-        Args:
-            event: Event to handle
-        """
-        if event.event_name == "detection":
-            self.logger.debug("Received detection event with %d detections", len(event.data))
-            self.detection_queue.put(event.data)
-        else:
-            self.logger.debug("Received unknown event: %s", event.event_name)
 
     def _finish(self) -> None:
         """Clean up navigator resources."""

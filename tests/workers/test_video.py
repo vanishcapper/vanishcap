@@ -25,6 +25,9 @@ class TestVideo(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         self.mock_cap = MagicMock()
         self.mock_cap.read.return_value = self.mock_frame
 
+        # Set the framerate attribute directly on the mock
+        self.mock_cap.framerate = 30.0
+
         # Create mock CamGear class that returns a started instance
         self.mock_camgear = MagicMock()
         self.mock_camgear.return_value.start.return_value = self.mock_cap
@@ -139,8 +142,8 @@ class TestVideo(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         event = video._emit.call_args[0][0]
         self.assertEqual(event.worker_name, "video")
         self.assertEqual(event.event_name, "frame")
-        self.assertEqual(event.data["frame_number"], 1)
-        np.testing.assert_array_equal(event.data["frame"], self.mock_frame)
+        self.assertEqual(event.frame_number, 1)
+        np.testing.assert_array_equal(event.data, self.mock_frame)
 
 
 if __name__ == "__main__":

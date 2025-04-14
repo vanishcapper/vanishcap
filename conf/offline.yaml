@@ -2,7 +2,7 @@
 controller:
   log_level: INFO # Log level for the controller itself
   log_file: "/tmp/vanishcap.log" # Optional: Path to log file
-  offline: false # Whether to run in offline mode (no WiFi management)
+  offline: true # Whether to run in offline mode (no WiFi management)
   wifi:
     connect:
       ssid: "t1" # Optional: SSID to connect to before starting workers
@@ -10,8 +10,7 @@ controller:
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
 video:
-  source: "udp://@0.0.0.0:11111" # Tello video stream
-  save_path: "/tmp/vanishcap_recording.mp4" # Path to save the video
+  source: "/tmp/vanishcap_recording.mp4" # Tello video stream
   log_level: INFO # Show frame acquisition info
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["detector", "drone"] # Wait for detector and drone to start
@@ -35,7 +34,7 @@ navigator:
     - detector: detection # Receive detection events from detector
 
 drone:
-  offline: false # Whether to run in offline mode (no WiFi management)
+  offline: true # Whether to run in offline mode (no WiFi management)
   ip: "192.168.10.1" # Default Tello IP address
   max_linear_velocity: 80 # Maximum linear velocity in cm/s
   max_angular_velocity: 90 # Maximum angular velocity in deg/s

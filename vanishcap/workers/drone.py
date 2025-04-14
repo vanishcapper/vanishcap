@@ -125,6 +125,10 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         # Check if we have a valid target
         if self.current_target and (current_time - self.last_target_time) < self.target_timeout:
             if not self.current_target.get("processed", False):
+                frame_number = self.current_target.get("frame_number")
+                if frame_number is not None:
+                    self.logger.info("Processing frame %d with target at (%.2f, %.2f)",
+                                   frame_number, self.current_target["x"], self.current_target["y"])
                 self._follow_target()
         else:
             if self.current_target:
@@ -245,6 +249,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             # Update target position
             self.current_target = event.data
             self.current_target["processed"] = False  # Initialize processed flag
+            self.current_target["frame_number"] = event.frame_number  # Store frame number
             self.last_target_time = time.time()
             self.logger.debug("Received new target position: (%.2f, %.2f)", event.data["x"], event.data["y"])
 
