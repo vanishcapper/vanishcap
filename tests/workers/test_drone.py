@@ -192,6 +192,7 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         """Test target timeout handling."""
         drone = Drone(self.config)
         drone.is_flying = True  # Set drone to flying state
+        drone.is_stopped = False
         drone.current_target = {"x": 0.4, "y": -0.4, "confidence": 1.0}
         drone.last_target_time = time.time() - 2.0  # Simulate timeout
         drone._task()  # Run task loop

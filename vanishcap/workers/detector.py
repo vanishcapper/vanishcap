@@ -106,7 +106,7 @@ class Detector(Worker):
             if self.frame_count % self.frame_skip == 0:
                 # Store the full event
                 self.latest_frame_event = event
-                self.logger.info("Received frame %d", event.frame_number)
+                self.logger.debug("Received frame %d", event.frame_number)
         else:
             self.logger.debug("Received unknown event: %s", event.event_name)
 
@@ -149,7 +149,7 @@ class Detector(Worker):
                 center_y = (norm_y1 + norm_y2) / 2
 
                 # Log detection details
-                self.logger.info(
+                self.logger.debug(
                     "Detected %s (%.2f) at (%.2f, %.2f) - (%.2f, %.2f)",
                     class_name,
                     confidence,
@@ -169,6 +169,14 @@ class Detector(Worker):
                         "y": center_y,
                     }
                 )
+
+        # Log summary of all detections, sorted by class_id
+        if detections:
+            summary = ", ".join(
+                f"{d['class_name']}({d['confidence']:.2f})"
+                for d in sorted(detections, key=lambda x: x['class_id'])
+            )
+            self.logger.info("Detections: %s", summary)
 
         # Emit detection event with frame number
         self._emit(Event(self.name, "detection", detections, frame_number=frame_number))

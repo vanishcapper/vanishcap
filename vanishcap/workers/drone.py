@@ -59,12 +59,20 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         # State
         self.is_flying = False
+        self.is_stopped = True  # Track if we're currently stopped
         self.current_target: Optional[Dict[str, float]] = None
         self.last_target_time = 0.0
         self.target_timeout = 1.0  # seconds
         self.yaw_start_time = 0.0
         self.yaw_duration = 0.0
         self.executing_yaw = False
+
+    def stop_movement(self) -> None:
+        """Stop all drone movement by sending zero RC commands."""
+        if not self.is_stopped:
+            self._dispatch_command("send_rc_control", 0, 0, 0, 0)
+            self.is_stopped = True
+            self.logger.debug("Drone stopped")
 
     def _normalize_velocity(self, velocity: float, max_velocity: float) -> int:
         """Convert a real-world velocity to a normalized RC command value.
@@ -92,7 +100,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             command: Name of the command to dispatch
             *args: Arguments to pass to the command
         """
-        self.logger.info("Dispatching command %s with args %s (offline mode: %s)", command, args, self.offline)
+        self.logger.info("Dispatching command %s with args %s", command, args)
         if self.offline:
             return
 
@@ -141,13 +149,13 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 self.logger.debug("Target lost - stopping yaw rotation")
 
             self.logger.debug("No valid target - stopping movement")
-            self._dispatch_command("send_rc_control", 0, 0, 0, 0)  # Stop movement
+            self.stop_movement()
 
         # Check if current yaw command has completed
         if self.executing_yaw and current_time >= self.yaw_start_time + self.yaw_duration:
             self.executing_yaw = False
             self.logger.debug("Completed yaw rotation - stopping yaw")
-            self._dispatch_command("send_rc_control", 0, 0, 0, 0)  # Stop all movement
+            self.stop_movement()
 
     def _calculate_yaw_duration(self, norm_x: float) -> float:
         """Calculate the duration needed for yaw rotation to center the target.
@@ -220,7 +228,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             # Use max yaw velocity in the appropriate direction
             yaw_rc = 100 if norm_x > 0 else -100
 
-            self.logger.debug(
+            self.logger.info(
                 "Starting timed yaw rotation: duration=%.2fs, rc=%d",
                 self.yaw_duration,
                 yaw_rc

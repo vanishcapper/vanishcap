@@ -156,7 +156,7 @@ class Ui(Worker):
             self.screen.blit(text, (x1, y1 - 20))
 
             # Log detection drawing
-            self.logger.info(
+            self.logger.debug(
                 "Drawing %s (%.2f) at normalized (%.2f, %.2f) - (%.2f, %.2f)",
                 detection["class_name"],
                 detection["confidence"],
@@ -165,6 +165,14 @@ class Ui(Worker):
                 norm_x2,
                 norm_y2,
             )
+
+        # Log summary of all boxes drawn, sorted by class_id
+        if self.current_detections:
+            summary = ", ".join(
+                f"{d['class_name']}({d['confidence']:.2f})"
+                for d in sorted(self.current_detections, key=lambda x: x['class_id'])
+            )
+            self.logger.info("Boxes drawn: %s", summary)
 
         # Draw frame number in top right
         frame_text = self.profile_font.render(f"Frame: {frame_number}", True, (255, 255, 255))
