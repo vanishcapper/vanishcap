@@ -5,7 +5,7 @@ controller:
   offline: false # Whether to run in offline mode (no WiFi management)
   wifi:
     connect:
-      ssid: "t1" # Optional: SSID to connect to before starting workers
+      ssid: "t2" # Optional: SSID to connect to before starting workers
       password: "" # Optional: Password for the SSID
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
@@ -42,6 +42,7 @@ drone:
   follow_distance: 100 # Distance to maintain from target in cm
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
   field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
+  percent_angle_to_command: 20 # Percentage of target angle to rotate in each yaw command [0, 100]
   auto_takeoff: true # Whether to take off automatically without waiting for a target
   log_level: INFO
   profile_window: 1.0 # Show max task time over last second

@@ -25,6 +25,8 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - field_of_view: Width of camera field of view in degrees (default: 82.6)
                 - auto_takeoff: Whether to take off automatically without target (default: false)
                 - offline: Whether to run in offline mode (default: false)
+                - percent_angle_to_command: Percentage of target angle to rotate in each yaw command
+                  [0, 100] (default: 100)
         """
         super().__init__("drone", config)
 
@@ -36,9 +38,10 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.field_of_view = config.get("field_of_view", 82.6)  # FOV in degrees
         self.auto_takeoff = config.get("auto_takeoff", False)  # Take off without target
         self.offline = config.get("offline", False)
+        self.percent_angle_to_command = config.get("percent_angle_to_command", 100)  # Default to 100%
         self.logger.debug(
             "Initialized drone worker with max_linear_velocity=%d, max_angular_velocity=%d, follow_distance=%d, "
-            "movement_threshold=%.2f, field_of_view=%.1f, auto_takeoff=%s, offline=%s",
+            "movement_threshold=%.2f, field_of_view=%.1f, auto_takeoff=%s, offline=%s, percent_angle_to_command=%d%%",
             self.max_linear_velocity,
             self.max_angular_velocity,
             self.follow_distance,
@@ -46,6 +49,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.field_of_view,
             self.auto_takeoff,
             self.offline,
+            self.percent_angle_to_command,
         )
 
         # Initialize drone connection if not offline
@@ -60,6 +64,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         # State
         self.is_flying = False
         self.is_stopped = True  # Track if we're currently stopped
+        self.ready_to_process_targets = False  # Track if we're ready to process targets
         self.current_target: Optional[Dict[str, float]] = None
         self.last_target_time = 0.0
         self.target_timeout = 1.0  # seconds
@@ -104,12 +109,24 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         if self.offline:
             return
 
+        # Handle state changes before executing commands
+        if command == "land":
+            self.ready_to_process_targets = False
+            self.logger.debug("Preparing to land - no longer ready to process targets")
+        elif command == "takeoff":
+            self.ready_to_process_targets = False
+
         try:
             # Get the command method from the drone
             cmd_method = getattr(self.drone, command)
             # Call the command with the provided arguments
             cmd_method(*args)
             self.logger.debug("Successfully executed command %s", command)
+
+            # Handle state changes for specific commands
+            if command == "takeoff":
+                self.ready_to_process_targets = True
+                self.logger.debug("Takeoff successful - ready to process targets")
         except AttributeError:
             self.logger.error("Unknown drone command: %s", command)
         except (ConnectionError, TimeoutError) as e:
@@ -125,19 +142,22 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         if self.auto_takeoff and not self.is_flying:
             self.logger.info("Auto takeoff enabled - taking off")
             self._dispatch_command("takeoff")
-            self.is_flying = True
+            self.is_flying = True # Not ready until takeoff is complete
             return
 
         current_time = time.time()
 
-        # Check if we have a valid target
+        # Check if we have a valid target and are ready to process it
         if self.current_target and (current_time - self.last_target_time) < self.target_timeout:
             if not self.current_target.get("processed", False):
                 frame_number = self.current_target.get("frame_number")
                 if frame_number is not None:
                     self.logger.info("Processing frame %d with target at (%.2f, %.2f)",
                                    frame_number, self.current_target["x"], self.current_target["y"])
-                self._follow_target()
+                if self.ready_to_process_targets:
+                    self._follow_target()
+                else:
+                    self.logger.debug("Not ready to process targets - skipping follow_target")
         else:
             if self.current_target:
                 self.logger.debug("Target lost - timeout after %.1f seconds", current_time - self.last_target_time)
@@ -170,13 +190,20 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         # norm_x range is [-1, 1], so multiply by half the FOV to get degrees
         angular_offset = norm_x * (self.field_of_view / 2)
 
+        # Scale the angular offset by the percentage we want to rotate
+        # Convert percentage to proportion by dividing by 100
+        scaled_angular_offset = angular_offset * (self.percent_angle_to_command / 100.0)
+
         # Calculate how long we need to rotate at max_angular_velocity to cover this angle
         # Using absolute value since we care about magnitude, not direction
-        duration = abs(angular_offset) / self.max_angular_velocity
+        duration = abs(scaled_angular_offset) / self.max_angular_velocity
 
         self.logger.debug(
-            "Angular offset: %.2f degrees, required yaw duration: %.2f s",
+            "Angular offset: %.2f degrees, scaled offset: %.2f degrees "
+            "(%.1f%% of target), required yaw duration: %.2f s",
             angular_offset,
+            scaled_angular_offset,
+            self.percent_angle_to_command,
             duration
         )
 

@@ -10,7 +10,7 @@ controller:
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
 video:
-  source: "/tmp/vanishcap_recording.mp4" # Tello video stream
+  source: "video/2.mp4" # Tello video stream
   log_level: INFO # Show frame acquisition info
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["detector", "drone"] # Wait for detector and drone to start
@@ -41,6 +41,7 @@ drone:
   follow_distance: 100 # Distance to maintain from target in cm
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
   field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
+  percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
   auto_takeoff: true # Whether to take off automatically without waiting for a target
   log_level: INFO
   profile_window: 1.0 # Show max task time over last second
