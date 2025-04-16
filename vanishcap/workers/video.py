@@ -38,8 +38,10 @@ class Video(Worker):
 
         # Initialize video capture with CamGear
         options = {
-            "THREADED_QUEUE_MODE": False,  # Disable threaded queue mode
-            "THREAD_TIMEOUT": 1.0,  # Set thread timeout to 1 second
+            "THREADED_QUEUE_MODE": not self.is_stream,  # Only enable threaded queue mode for files
+            "THREAD_TIMEOUT": 5.0,  # Increase thread timeout to 5 seconds
+            "QUEUE_TIMEOUT": 5.0,  # Add queue timeout
+            "BUFFER_QUEUE_SIZE": 100,  # Increase buffer size
         }
         self.cap = CamGear(source=self.source, **options).start()
         if self.cap is None:
@@ -75,9 +77,13 @@ class Video(Worker):
         try:
             # Check if enough time has passed for the next frame (only for files)
             current_time = time.time()
-            if not self.is_stream and self.frame_time > 0 and current_time - self.last_frame_time < self.frame_time:
-                sleep_time = self.frame_time - (current_time - self.last_frame_time)
-                time.sleep(sleep_time)
+            if not self.is_stream and self.frame_time > 0:
+                time_since_last_frame = current_time - self.last_frame_time
+                if time_since_last_frame < self.frame_time:
+                    sleep_time = self.frame_time - time_since_last_frame
+                    self.logger.debug("Sleeping for %.3f seconds to maintain framerate", sleep_time)
+                    time.sleep(sleep_time)
+                    current_time = time.time()  # Update current time after sleep
 
             # Read frame
             frame = self.cap.read()
@@ -87,7 +93,7 @@ class Video(Worker):
                 return
 
             # Update last frame time
-            self.last_frame_time = time.time()
+            self.last_frame_time = current_time
 
             # Increment frame number
             self.frame_number += 1
@@ -97,7 +103,8 @@ class Video(Worker):
                 self.writer.write(frame)
 
             # Emit frame event with frame number
-            self.logger.info("Acquired frame %d", self.frame_number)
+            self.logger.info("Acquired frame %d (time since last frame: %.3f seconds)",
+                           self.frame_number, current_time - self.last_frame_time)
             self._emit(Event(self.name, "frame", frame, frame_number=self.frame_number))
         except Empty:
             self.logger.warning("Video stream queue empty - stopping worker")
