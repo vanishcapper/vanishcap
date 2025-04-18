@@ -163,8 +163,13 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
         """
         with self._event_lock:
             event_key = (event.worker_name, event.event_name)
-            self.logger.debug("Worker %s dispatching event %s from %s (overwriting: %s)",
-                             self.name, event.event_name, event.worker_name, event_key in self._latest_events)
+            self.logger.debug(
+                "Worker %s dispatching event %s from %s (overwriting: %s)",
+                self.name,
+                event.event_name,
+                event.worker_name,
+                event_key in self._latest_events,
+            )
             self._latest_events[event_key] = event
 
     def _emit(self, event: Event) -> None:

@@ -23,7 +23,9 @@ class WorkerNameFilter(logging.Filter):
 _global_file_handler = None
 
 
-def get_worker_logger(worker_name: str, log_level: Optional[str] = None, log_file: Optional[str] = None) -> logging.Logger:
+def get_worker_logger(
+    worker_name: str, log_level: Optional[str] = None, log_file: Optional[str] = None
+) -> logging.Logger:
     """Get a logger for a worker with the specified log level.
 
     Args:
@@ -66,7 +68,7 @@ def get_worker_logger(worker_name: str, log_level: Optional[str] = None, log_fil
         if log_file and _global_file_handler is None:
             # Create directory if it doesn't exist
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
-            _global_file_handler = logging.FileHandler(log_file, mode='w')  # Use 'w' mode to overwrite
+            _global_file_handler = logging.FileHandler(log_file, mode="w")  # Use 'w' mode to overwrite
             _global_file_handler.addFilter(name_filter)
             _global_file_handler.setFormatter(formatter)
 

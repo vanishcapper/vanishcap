@@ -103,13 +103,17 @@ class Detector(Worker):
             return
 
         # Code below is now executed only if latest_frame_event is not None
-        self.frame_count += 1 # Increment frame count only when a frame is considered
+        self.frame_count += 1  # Increment frame count only when a frame is considered
 
         # Check if frame should be skipped
         if self.frame_count % self.frame_skip != 0:
-            self.logger.debug("Skipping frame %d due to frame_skip (%d %% %d != 0)",
-                             latest_frame_event.frame_number, self.frame_count, self.frame_skip)
-            return # Skip processing this frame
+            self.logger.debug(
+                "Skipping frame %d due to frame_skip (%d %% %d != 0)",
+                latest_frame_event.frame_number,
+                self.frame_count,
+                self.frame_skip,
+            )
+            return  # Skip processing this frame
 
         # Process the frame (logic moved back from _process_frame)
         frame_event = latest_frame_event
@@ -173,8 +177,7 @@ class Detector(Worker):
         # Log summary of all detections, sorted by class_id
         if detections:
             summary = ", ".join(
-                f"{d['class_name']}({d['confidence']:.2f})"
-                for d in sorted(detections, key=lambda x: x['class_id'])
+                f"{d['class_name']}({d['confidence']:.2f})" for d in sorted(detections, key=lambda x: x["class_id"])
             )
             self.logger.info("Detections in frame %d: %s", frame_number, summary)
         else:

@@ -127,7 +127,7 @@ class TestBaseWorker(unittest.TestCase):
         """Test that only latest events are processed."""
         events = [
             Event("other_worker", "test_event", {"test": "data1"}),
-            Event("other_worker", "test_event", {"test": "data2"})  # Same event type
+            Event("other_worker", "test_event", {"test": "data2"}),  # Same event type
         ]
 
         self.worker.start(self.mock_controller)

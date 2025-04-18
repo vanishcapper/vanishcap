@@ -96,7 +96,7 @@ class Ui(Worker):
             self._emit(Event(self.name, "stop", None))
             self._stop_event.set()
             # pygame.display.quit() # Quit handled in _finish
-            return # Exit task early if quitting
+            return  # Exit task early if quitting
 
         # Get latest events from BaseWorker
         latest_events = self._get_latest_events_and_clear()
@@ -177,7 +177,7 @@ class Ui(Worker):
         if self.current_detections:
             summary = ", ".join(
                 f"{d['class_name']}({d['confidence']:.2f})"
-                for d in sorted(self.current_detections, key=lambda x: x['class_id'])
+                for d in sorted(self.current_detections, key=lambda x: x["class_id"])
             )
             self.logger.info("Boxes drawn: %s", summary)
 

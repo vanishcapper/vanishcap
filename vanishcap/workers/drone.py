@@ -168,15 +168,20 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.current_target = latest_target_event.data
             self.current_target["processed"] = False  # Initialize processed flag
             self.current_target["frame_number"] = latest_target_event.frame_number  # Store frame number
-            self.last_target_time = current_time # Update last seen time
-            self.logger.debug("Received new target position (frame %d): (%.2f, %.2f), current target: %s",
-                             latest_target_event.frame_number, self.current_target["x"], self.current_target["y"], self.current_target)
+            self.last_target_time = current_time  # Update last seen time
+            self.logger.debug(
+                "Received new target position (frame %d): (%.2f, %.2f), current target: %s",
+                latest_target_event.frame_number,
+                self.current_target["x"],
+                self.current_target["y"],
+                self.current_target,
+            )
 
             # Start flying if not already
             if not self.is_flying and not self.auto_takeoff:
                 self.logger.debug("Target detected - taking off")
                 self._dispatch_command("takeoff")
-                self.is_flying = True # State change occurs after successful command dispatch
+                self.is_flying = True  # State change occurs after successful command dispatch
 
         # Check if we should auto takeoff (only if no target found yet)
         elif self.auto_takeoff and not self.is_flying:
@@ -190,8 +195,12 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             if not self.current_target.get("processed", False):
                 frame_number = self.current_target.get("frame_number")
                 if frame_number is not None:
-                    self.logger.info("Processing frame %d with target at (%.2f, %.2f)",
-                                   frame_number, self.current_target["x"], self.current_target["y"])
+                    self.logger.info(
+                        "Processing frame %d with target at (%.2f, %.2f)",
+                        frame_number,
+                        self.current_target["x"],
+                        self.current_target["y"],
+                    )
                 if self.ready_to_process_targets:
                     self._follow_target()
                 else:
@@ -240,7 +249,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             angular_offset,
             scaled_angular_offset,
             self.percent_angle_to_command,
-            duration
+            duration,
         )
 
         return duration
@@ -289,8 +298,13 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         # Convert velocities to normalized RC command values
         fb_rc = self._normalize_velocity(fb_velocity, self.max_linear_velocity)
         ud_rc = self._normalize_velocity(ud_velocity, self.max_vertical_velocity)
-        self.logger.debug("up/down params: top_y=%.2f, target_top_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
-                         top_y, target_top_y, ud_velocity, ud_rc)
+        self.logger.debug(
+            "up/down params: top_y=%.2f, target_top_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
+            top_y,
+            target_top_y,
+            ud_velocity,
+            ud_rc,
+        )
 
         # Only move if offset is significant
         if abs(norm_y) < self.movement_threshold:
@@ -307,16 +321,22 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             # Use max yaw velocity in the appropriate direction
             yaw_rc = 100 if norm_x > 0 else -100
 
-            self.logger.info(
-                "Starting timed yaw rotation: duration=%.2fs, rc=%d",
-                self.yaw_duration,
-                yaw_rc
+            self.logger.info("Starting timed yaw rotation: duration=%.2fs, rc=%d", self.yaw_duration, yaw_rc)
+            self._dispatch_command(
+                "send_rc_control",
+                0,
+                fb_rc if not self.disable_xy else 0,
+                ud_rc if not self.disable_z else 0,
+                yaw_rc if not self.disable_yaw else 0,
             )
-            self._dispatch_command("send_rc_control", 0, fb_rc if not self.disable_xy else 0, ud_rc if not self.disable_z else 0, yaw_rc if not self.disable_yaw else 0)
         else:
             # Just handle forward/backward and up/down movement
-            self.logger.debug("Movement command - fb: %d, ud: %d (threshold: %.2f)", fb_rc, ud_rc, self.movement_threshold)
-            self._dispatch_command("send_rc_control", 0, fb_rc if not self.disable_xy else 0, ud_rc if not self.disable_z else 0, 0)
+            self.logger.debug(
+                "Movement command - fb: %d, ud: %d (threshold: %.2f)", fb_rc, ud_rc, self.movement_threshold
+            )
+            self._dispatch_command(
+                "send_rc_control", 0, fb_rc if not self.disable_xy else 0, ud_rc if not self.disable_z else 0, 0
+            )
 
         # Mark target as processed
         self.current_target["processed"] = True

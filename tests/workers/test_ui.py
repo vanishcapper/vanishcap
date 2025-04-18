@@ -99,9 +99,7 @@ class TestUI(unittest.TestCase):
 
     def test_handle_detection_event(self):
         """Test handling of detection events (state update only)."""
-        detections = [
-            {"bbox": (0.1, 0.1, 0.5, 0.5), "confidence": 0.9, "class_name": "person"}
-        ]
+        detections = [{"bbox": (0.1, 0.1, 0.5, 0.5), "confidence": 0.9, "class_name": "person"}]
         detection_event = Event("detector", "detection", detections, frame_number=1)
         self.ui._dispatch(detection_event)
         self.ui._task()  # Process the event
