@@ -110,17 +110,6 @@ class Video(Worker):
             self.logger.warning("Video stream queue empty - stopping worker")
             self._stop_event.set()
 
-    def __call__(self, event: Event) -> None:
-        """Handle incoming events.
-
-        Args:
-            event: Event to handle
-        """
-        if event.event_name == "command":
-            self.logger.info("Received command: %s", event.data)
-        else:
-            self.logger.debug("Received unknown event: %s", event.event_name)
-
     def _finish(self) -> None:
         """Clean up video resources."""
         if self.writer is not None:

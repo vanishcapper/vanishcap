@@ -24,8 +24,13 @@ class TestWorker(Worker):
 
     def _task(self):
         """Mock task implementation."""
+        # Process any pending events
+        events = self._get_latest_events_and_clear()
+        for event in events.values():
+            self._process_event(event)
+        time.sleep(0.001)  # Small sleep to prevent CPU spinning
 
-    def __call__(self, event):
+    def _process_event(self, event):
         """Record received events."""
         self.processed_events.append(event)
 

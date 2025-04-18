@@ -4,7 +4,6 @@ import time
 from typing import Any, Dict, Optional
 
 from djitellopy import Tello
-from vanishcap.event import Event
 from vanishcap.worker import Worker
 
 
@@ -138,14 +137,38 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
     def _task(self) -> None:
         """Run one iteration of the drone control loop."""
-        # Check if we should auto takeoff
-        if self.auto_takeoff and not self.is_flying:
+        current_time = time.time()
+
+        # Get latest events and find the latest target event
+        latest_target_event = self._get_latest_events_and_clear().get("target", None)
+
+        # Process the latest target event if found
+        if latest_target_event is not None:
+            # If we're executing a yaw and receive a new target, reset yaw execution
+            if self.executing_yaw:
+                self.executing_yaw = False
+                self.logger.debug("New target detected - resetting yaw rotation")
+
+            # Update target position from the latest event
+            self.current_target = latest_target_event.data
+            self.current_target["processed"] = False  # Initialize processed flag
+            self.current_target["frame_number"] = latest_target_event.frame_number  # Store frame number
+            self.last_target_time = current_time # Update last seen time
+            self.logger.debug("Received new target position (frame %d): (%.2f, %.2f)",
+                             latest_target_event.frame_number, self.current_target["x"], self.current_target["y"])
+
+            # Start flying if not already
+            if not self.is_flying and not self.auto_takeoff:
+                self.logger.debug("Target detected - taking off")
+                self._dispatch_command("takeoff")
+                self.is_flying = True # State change occurs after successful command dispatch
+
+        # Check if we should auto takeoff (only if no target found yet)
+        elif self.auto_takeoff and not self.is_flying:
             self.logger.info("Auto takeoff enabled - taking off")
             self._dispatch_command("takeoff")
-            self.is_flying = True # Not ready until takeoff is complete
-            return
-
-        current_time = time.time()
+            self.is_flying = True
+            self.stop_movement()
 
         # Check if we have a valid target and are ready to process it
         if self.current_target and (current_time - self.last_target_time) < self.target_timeout:
@@ -159,8 +182,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 else:
                     self.logger.debug("Not ready to process targets - skipping follow_target")
         else:
-            if self.current_target:
-                self.logger.debug("Target lost - timeout after %.1f seconds", current_time - self.last_target_time)
             self.current_target = None
 
             # Stop movement and reset yaw execution if target is lost
@@ -268,31 +289,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         # Mark target as processed
         self.current_target["processed"] = True
-
-    def __call__(self, event: Event) -> None:
-        """Handle incoming events.
-
-        Args:
-            event: The event to handle
-        """
-        if event.event_name == "target":
-            # If we're executing a yaw and receive a new target, reset yaw execution
-            if self.executing_yaw:
-                self.executing_yaw = False
-                self.logger.debug("New target detected - resetting yaw rotation")
-
-            # Update target position
-            self.current_target = event.data
-            self.current_target["processed"] = False  # Initialize processed flag
-            self.current_target["frame_number"] = event.frame_number  # Store frame number
-            self.last_target_time = time.time()
-            self.logger.debug("Received new target position: (%.2f, %.2f)", event.data["x"], event.data["y"])
-
-            # Start flying if not already
-            if not self.is_flying:
-                self.logger.debug("Target detected - taking off")
-                self._dispatch_command("takeoff")
-                self.is_flying = True
 
     def _finish(self) -> None:
         """Clean up resources."""

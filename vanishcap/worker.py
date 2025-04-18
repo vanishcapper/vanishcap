@@ -1,11 +1,10 @@
 """Base class for all workers in the system."""
 
-import queue
 import threading
 import time
 import traceback
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from vanishcap.event import Event
 from vanishcap.utils.logging import get_worker_logger
@@ -29,9 +28,10 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
         # Thread control
         self._run_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._event_lock = threading.Lock()
 
         # Event handling
-        self._event_queue = queue.Queue()  # Queue for receiving events
+        self._latest_events: Dict[Tuple[str, str], Event] = {}
         self._controller: Optional[Any] = None  # Reference to the Controller
 
         # Profiling
@@ -74,22 +74,25 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
             # For main thread workers, process events in the main loop
             self._run_with_events()
 
-    def _process_events(self) -> None:
-        """Process any pending events in the queue."""
-        try:
-            event = self._event_queue.get_nowait()
-            self.logger.debug("Worker %s processing event %s", self.name, event.event_name)
-            self(event)
-            # If stop event was received, break immediately
-            if self._stop_event.is_set():
-                return
-        except queue.Empty:
-            pass
+    def _get_latest_events_and_clear(self) -> Dict[str, Event]:
+        """Get the latest events received since the last call and clear the store.
+
+        Returns:
+            Dict[str, Event]: A dictionary mapping event names to their corresponding events.
+        """
+        events_to_process = {}
+        with self._event_lock:
+            if self._latest_events:
+                # Convert to a dict of event_name: event
+                events_to_process = {event.event_name: event for event in self._latest_events.values()}
+                self._latest_events.clear()
+        return events_to_process
 
     def _run_iteration(self) -> None:
         """Run one iteration of the worker's main loop."""
-        # Process any pending events
-        self._process_events()
+        # Check stop event again before running the task
+        if self._stop_event.is_set():
+            return
 
         # Run one iteration of the main loop with timing
         start_time = time.perf_counter()
@@ -108,15 +111,6 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
         """Run the worker in the main thread, processing events."""
         while not self._stop_event.is_set():
             self._run_iteration()
-
-        # Process any remaining events before finishing
-        try:
-            while True:
-                event = self._event_queue.get_nowait()
-                self.logger.debug("Worker %s processing remaining event %s", self.name, event.event_name)
-                self(event)
-        except queue.Empty:
-            pass
 
         # Clean up resources when stopping
         self._finish()
@@ -138,15 +132,6 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
             self.logger.error("Error in %s loop: %s", self.name, e)
             traceback.print_exc()
         finally:
-            # Process any remaining events before finishing
-            try:
-                while True:
-                    event = self._event_queue.get_nowait()
-                    self.logger.debug("Worker %s processing remaining event %s", self.name, event.event_name)
-                    self(event)
-            except queue.Empty:
-                pass
-
             self._finish()
             self.logger.warning("%s loop stopped", self.name)
 
@@ -176,7 +161,11 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
         Args:
             event: Event to handle
         """
-        self._event_queue.put(event)
+        with self._event_lock:
+            event_key = (event.worker_name, event.event_name)
+            self.logger.debug("Worker %s dispatching event %s from %s (overwriting: %s)",
+                             self.name, event.event_name, event.worker_name, event_key in self._latest_events)
+            self._latest_events[event_key] = event
 
     def _emit(self, event: Event) -> None:
         """Emit an event to the Controller.
@@ -186,14 +175,6 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
         """
         if self._controller is not None:
             self._controller(event)
-
-    @abstractmethod
-    def __call__(self, event: Event) -> None:
-        """Handle an event. Must be implemented by subclasses.
-
-        Args:
-            event: Event to handle
-        """
 
     @abstractmethod
     def _task(self) -> None:

@@ -43,9 +43,7 @@ class TestNavigator(unittest.TestCase):
 
         # Create and handle detection event
         detection_event = Event("detector", "detection", detections, frame_number=1)
-        self.navigator(detection_event)
-
-        # Run task to process detections
+        self.navigator._dispatch(detection_event)
         self.navigator._task()
 
         # Verify target event was emitted with correct data
@@ -67,9 +65,7 @@ class TestNavigator(unittest.TestCase):
 
         # Create and handle detection event
         detection_event = Event("detector", "detection", detections, frame_number=1)
-        self.navigator(detection_event)
-
-        # Run task to process detections
+        self.navigator._dispatch(detection_event)
         self.navigator._task()
 
         # Verify largest target was selected
@@ -87,9 +83,7 @@ class TestNavigator(unittest.TestCase):
 
         # Create and handle detection event
         detection_event = Event("detector", "detection", detections, frame_number=1)
-        self.navigator(detection_event)
-
-        # Run task to process detections
+        self.navigator._dispatch(detection_event)
         self.navigator._task()
 
         # Verify no target event was emitted
@@ -107,9 +101,7 @@ class TestNavigator(unittest.TestCase):
         """Test handling of unknown events."""
         # Create unknown event
         event = Event("unknown", "unknown", {}, frame_number=1)
-        self.navigator(event)
-
-        # Run task to process detections
+        self.navigator._dispatch(event)
         self.navigator._task()
 
         # Verify no target event was emitted

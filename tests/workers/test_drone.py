@@ -203,7 +203,8 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         """Test event handling."""
         drone = Drone(self.config)
         event = Event("drone", "target", {"x": 0.4, "y": -0.4, "confidence": 1.0})
-        drone(event)
+        drone._dispatch(event)
+        drone._task()  # Process the event
         self.assertEqual(drone.is_flying, True)
         self.assertEqual(getattr(drone.drone, "takeoff").call_count, 1)
 

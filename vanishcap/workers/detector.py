@@ -1,7 +1,7 @@
 """Worker for detecting objects in frames using YOLOv5."""
 
 import os
-import queue
+import time
 from typing import Any, Dict
 
 import numpy as np
@@ -76,7 +76,6 @@ class Detector(Worker):
 
         # Initialize state
         self.frame_count = 0
-        self.latest_frame_event = None
 
     def _normalize_coordinates(self, x: float, y: float, width: float, height: float) -> tuple[float, float]:
         """Normalize coordinates to [-1, 1] range.
@@ -95,36 +94,37 @@ class Detector(Worker):
         norm_y = (y / height) * 2 - 1
         return norm_x, norm_y
 
-    def __call__(self, event: Event) -> None:
-        """Handle incoming events.
-
-        Args:
-            event: Event to handle
-        """
-        if event.event_name == "frame":
-            self.frame_count += 1
-            if self.frame_count % self.frame_skip == 0:
-                # Store the full event
-                self.latest_frame_event = event
-                self.logger.debug("Received frame %d", event.frame_number)
-        else:
-            self.logger.debug("Received unknown event: %s", event.event_name)
-
     def _task(self) -> None:  # pylint: disable=too-many-locals
-        """Run one iteration of the detector loop."""
-        # Skip if no frame available
-        if self.latest_frame_event is None:
+        """Run one iteration of the detector loop: get latest events and process frame."""
+
+        latest_frame_event = self._get_latest_events_and_clear().get("frame", None)
+        if latest_frame_event is None:
+            self.logger.debug("No frame event to process in this task iteration.")
             return
 
+        # Code below is now executed only if latest_frame_event is not None
+        self.frame_count += 1 # Increment frame count only when a frame is considered
+
+        # Check if frame should be skipped
+        if self.frame_count % self.frame_skip != 0:
+            self.logger.debug("Skipping frame %d due to frame_skip (%d %% %d != 0)",
+                             latest_frame_event.frame_number, self.frame_count, self.frame_skip)
+            return # Skip processing this frame
+
+        # Process the frame (logic moved back from _process_frame)
+        frame_event = latest_frame_event
         # Extract frame data
-        frame = self.latest_frame_event.data
-        frame_number = self.latest_frame_event.frame_number
+        frame = frame_event.data
+        frame_number = frame_event.frame_number
 
         # Log which frame we're processing
-        self.logger.info("Processing frame %d", frame_number)
+        self.logger.info("Processing frame %d (Task)", frame_number)
 
         # Run detection with verbose=False to suppress YOLO's default logging
+        start_time = time.perf_counter()
         results = self.model(frame, verbose=False)
+        processing_time = time.perf_counter() - start_time
+        self.logger.info("Frame %d detection took %.3f ms", frame_number, processing_time * 1000)
 
         # Get frame dimensions
         height, width = frame.shape[:2]
@@ -176,42 +176,12 @@ class Detector(Worker):
                 f"{d['class_name']}({d['confidence']:.2f})"
                 for d in sorted(detections, key=lambda x: x['class_id'])
             )
-            self.logger.info("Detections: %s", summary)
+            self.logger.info("Detections in frame %d: %s", frame_number, summary)
+        else:
+            self.logger.info("No detections in frame %d", frame_number)
 
         # Emit detection event with frame number
         self._emit(Event(self.name, "detection", detections, frame_number=frame_number))
-
-        # Clear the frame event after processing
-        self.latest_frame_event = None
-
-    def _dispatch(self, event: Event) -> None:
-        """Handle an incoming event from the Controller.
-
-        For frame events, we only keep the latest one in the queue.
-        For other events, we use the default queue behavior.
-
-        Args:
-            event: Event to handle
-        """
-        if event.event_name == "frame":
-            # Clear any existing frame events from the queue
-            try:
-                while True:
-                    old_event = self._event_queue.get_nowait()
-                    if old_event.event_name == "frame":
-                        self.logger.debug("Discarding old frame event %d", old_event.frame_number)
-            except queue.Empty:
-                pass
-
-            # Add the new frame event
-            self.logger.debug("Worker %s dispatching frame event %d", self.name, event.frame_number)
-            self._event_queue.put(event)
-            self.logger.debug("Worker %s frame event %d queued", self.name, event.frame_number)
-        else:
-            # Use default queue behavior for non-frame events
-            self.logger.debug("Worker %s dispatching event %s", self.name, event.event_name)
-            self._event_queue.put(event)
-            self.logger.debug("Worker %s event %s queued", self.name, event.event_name)
 
     def _finish(self) -> None:
         """Clean up detector resources."""

@@ -2,7 +2,6 @@
 
 # pylint: disable=protected-access
 
-import queue
 import unittest
 from unittest.mock import MagicMock, patch
 import numpy as np
@@ -119,39 +118,40 @@ class TestDetector(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         """Test event handling."""
         detector = Detector(self.config)
 
-        # Test frame event - use integer frame_number (e.g., 1)
-        frame_event1 = Event("video", "frame", {"frame": self.mock_frame, "frame_number": 1}, frame_number=1)
-        detector(frame_event1)
+        # Test frame event
+        frame_event1 = Event("video", "frame", self.mock_frame, frame_number=1)
+        detector._dispatch(frame_event1)
+        detector._task()
         self.assertEqual(detector.frame_count, 1)
-        self.assertEqual(detector.latest_frame_event, None)
 
-        # Second frame - use integer frame_number (e.g., 2)
-        frame_event2 = Event("video", "frame", {"frame": self.mock_frame, "frame_number": 2}, frame_number=2)
-        detector(frame_event2)
+        # Second frame
+        frame_event2 = Event("video", "frame", self.mock_frame, frame_number=2)
+        detector._dispatch(frame_event2)
+        detector._task()
         self.assertEqual(detector.frame_count, 2)
-        self.assertEqual(detector.latest_frame_event, frame_event2)
 
-        # Test unknown event - use integer frame_number (e.g., 0) as workaround
-        unknown_event = Event("video", "unknown", {}, frame_number=0)
-        detector(unknown_event)
+        # Test unknown event
+        unknown_event = Event("video", "unknown", {})
+        detector._dispatch(unknown_event)
+        detector._task()
 
     def test_task_execution(self):
         """Test task execution with detections."""
         detector = Detector(self.config)
-        detector.image_width = self.mock_frame.shape[1]
-        detector.image_height = self.mock_frame.shape[0]
         detector._emit = MagicMock()
 
-        # Set up frame event - data should be the frame array directly
-        frame_event = Event("video", "frame", self.mock_frame, frame_number=1)
-        detector.latest_frame_event = frame_event
+        # Set up first frame event (will be skipped)
+        frame_event1 = Event("video", "frame", self.mock_frame, frame_number=1)
+        detector._dispatch(frame_event1)
+        detector._task()
 
-        # Run task
+        # Set up second frame event (will be processed)
+        frame_event2 = Event("video", "frame", self.mock_frame, frame_number=2)
+        detector._dispatch(frame_event2)
         detector._task()
 
         # Verify detection event was emitted
         detector._emit.assert_called_once()
-        emitted_event = detector._emit.call_args[0][0]
         event = detector._emit.call_args[0][0]
         self.assertEqual(event.worker_name, "detector")
         self.assertEqual(event.event_name, "detection")
@@ -166,15 +166,12 @@ class TestDetector(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         self.assertTrue("y" in detection)
 
         # Verify frame_number is passed through
-        self.assertEqual(emitted_event.frame_number, 1)
+        self.assertEqual(event.frame_number, 2)
 
     def test_task_no_frame(self):
         """Test task execution without frame."""
         detector = Detector(self.config)
         detector._emit = MagicMock()
-
-        # Ensure latest_frame_event is None
-        detector.latest_frame_event = None
 
         # Run task without frame
         detector._task()
@@ -186,49 +183,39 @@ class TestDetector(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         """Test dispatching frame events."""
         detector = Detector(self.config)
 
-        # Create two frame events - use integer frame_numbers
-        frame_event1 = Event("video", "frame", {"frame": self.mock_frame, "frame_number": 1}, frame_number=1)
-        frame_event2 = Event("video", "frame", {"frame": self.mock_frame, "frame_number": 2}, frame_number=2)
+        # Create two frame events
+        frame_event1 = Event("video", "frame", self.mock_frame, frame_number=1)
+        frame_event2 = Event("video", "frame", self.mock_frame, frame_number=2)
 
         # Dispatch first frame event
         detector._dispatch(frame_event1)
-        # Verify intermediate state if necessary (optional)
-        self.assertEqual(detector._event_queue.qsize(), 1)
-        queued_event_temp = detector._event_queue.queue[0] # Peek
-        self.assertEqual(queued_event_temp.data["frame_number"], 1)
+        detector._task()
+        self.assertEqual(detector.frame_count, 1)
 
         # Dispatch second frame event
         detector._dispatch(frame_event2)
-
-        # Verify only the latest frame event is in the queue
-        self.assertEqual(detector._event_queue.qsize(), 1)
-        queued_event = detector._event_queue.get_nowait()
-        self.assertEqual(queued_event.data["frame_number"], 2) # Check data field
-        self.assertEqual(queued_event.frame_number, 2) # Check event attribute
-
-        with self.assertRaises(queue.Empty):
-            detector._event_queue.get_nowait()
+        detector._task()
+        self.assertEqual(detector.frame_count, 2)
 
     def test_dispatch_other_event(self):
         """Test dispatching non-frame events."""
         detector = Detector(self.config)
 
-        # Use integer frame_number (e.g., 0) as workaround
-        other_event = Event("video", "other", {}, frame_number=0)
-        detector._dispatch(other_event)
+        # Create a non-frame event
+        other_event = Event("video", "other", {"data": "test"})
 
-        # Verify event is in queue
-        self.assertEqual(detector._event_queue.qsize(), 1)
-        queued_event = detector._event_queue.get_nowait()
-        self.assertEqual(queued_event.event_name, "other")
-        # Check frame_number is the integer we set
-        self.assertEqual(queued_event.frame_number, 0)
+        # Dispatch the event
+        detector._dispatch(other_event)
+        detector._task()
+
+        # Verify the event was handled without errors
+        self.assertEqual(detector.frame_count, 0)
 
     def test_finish(self):
         """Test cleanup in finish method."""
         detector = Detector(self.config)
         detector._finish()
-        # No assertions needed as _finish just logs a message
+        # Verify cleanup completed without errors
 
 
 if __name__ == "__main__":

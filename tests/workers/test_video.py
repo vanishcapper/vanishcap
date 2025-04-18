@@ -108,11 +108,17 @@ class TestVideo(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
 
         # Test command event
         command_event = Event("video", "command", {"action": "test"})
-        video(command_event)
+        video._dispatch(command_event)
+
+        # Process events in task
+        video._task()
 
         # Test unknown event
         unknown_event = Event("video", "unknown", {})
-        video(unknown_event)
+        video._dispatch(unknown_event)
+
+        # Process events in task
+        video._task()
 
     def test_finish(self):
         """Test cleanup in finish method."""

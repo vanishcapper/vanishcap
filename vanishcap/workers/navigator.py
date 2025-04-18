@@ -1,6 +1,5 @@
 """Worker for processing detections and emitting navigation commands."""
 
-import queue
 from typing import Any, Dict
 
 from vanishcap.event import Event
@@ -23,28 +22,19 @@ class Navigator(Worker):
         self.logger.warning("Initialized navigator worker with target class: %s", self.target_class)
 
         # Initialize state
-        self.detection_queue = queue.Queue()
-
-    def __call__(self, event: Event) -> None:
-        """Handle incoming events.
-
-        Args:
-            event: Event to handle
-        """
-        if event.event_name == "detection":
-            self.detection_queue.put((event.data, event.frame_number))
-            self.logger.debug("Received detection event with %d detections", len(event.data))
-        else:
-            self.logger.debug("Received unknown event: %s", event.event_name)
 
     def _task(self) -> None:
         """Run one iteration of the navigator loop."""
-        # Get detections from queue
-        try:
-            detections, frame_number = self.detection_queue.get_nowait()
-            self.logger.info("Processing frame %d with %d detections", frame_number, len(detections))
-        except queue.Empty:
+        # Get latest events
+        latest_detection_event = self._get_latest_events_and_clear().get("detection", None)
+
+        # Process the latest detection event if found
+        if latest_detection_event is None:
             return
+
+        detections = latest_detection_event.data
+        frame_number = latest_detection_event.frame_number
+        self.logger.info("Processing latest detections (frame %d) with %d detections", frame_number, len(detections))
 
         # Process detections
         target_detections = [d for d in detections if d["class_name"] == self.target_class]

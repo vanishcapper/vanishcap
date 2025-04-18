@@ -3,10 +3,9 @@
 # pylint: disable=wrong-import-position
 
 import os
-import queue
 import time
 import traceback
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 # Suppress pygame startup message
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
@@ -59,12 +58,12 @@ class Ui(Worker):
             traceback.print_exc()
             raise
 
-        # Initialize state
-        self.current_frame_event = None
+        # Initialize state - Reinstate state variables
+        self.current_frame_event: Optional[Event] = None
         self.current_detections = []
+        self.worker_profiles = {}  # Maps worker name to last task time
 
         # Profiling data
-        self.worker_profiles = {}  # Maps worker name to last task time
         self.profile_font = pygame.font.Font(None, 20)  # Small font for profiling text
 
     def _denormalize_coordinates(self, x: float, y: float, width: float, height: float) -> tuple[int, int]:
@@ -84,35 +83,43 @@ class Ui(Worker):
         pixel_y = int((y + 1) * height / 2)
         return pixel_x, pixel_y
 
-    def _task(self) -> None:  # pylint: disable=too-many-locals
+    def _task(self) -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         """Run one iteration of the UI loop."""
-        # Handle pygame events
-        for event in pygame.event.get():
+        # Handle pygame events first
+        for py_event in pygame.event.get():
             if not (
-                event.type == pygame.QUIT  # pylint: disable=no-member
-                or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE)  # pylint: disable=no-member
+                py_event.type == pygame.QUIT  # pylint: disable=no-member
+                or (py_event.type == pygame.KEYDOWN and py_event.key == pygame.K_ESCAPE)  # pylint: disable=no-member
             ):
                 continue
-            self.logger.warning("Received quit event")
+            self.logger.warning("Received quit event from pygame")
             self._emit(Event(self.name, "stop", None))
             self._stop_event.set()
-            pygame.display.quit()
-            if self._event_queue is not None:
-                try:
-                    event = self._event_queue.get_nowait()
-                    self(event)
-                except queue.Empty:
-                    pass
-            return
+            # pygame.display.quit() # Quit handled in _finish
+            return # Exit task early if quitting
+
+        # Get latest events from BaseWorker
+        latest_events = self._get_latest_events_and_clear()
+
+        for _, event in latest_events.items():
+            if event.event_name == "frame":
+                self.current_frame_event = event
+            elif event.event_name == "detection":
+                self.current_detections = event.data
+            elif event.event_name == "worker_profile":
+                worker_name = event.worker_name
+                task_time = event.data["task_time"]
+                self.worker_profiles[worker_name] = task_time
 
         # Update display if we have a frame and enough time has passed
         if (
             self.current_frame_event is None
             or time.time() - self.display_config["last_frame_time"] < self.display_config["frame_time"]
         ):
+            # No new frame to render or too soon, skip render
             return
 
-        # Extract frame data
+        # Extract frame data from the instance variable
         frame = self.current_frame_event.data
         frame_number = self.current_frame_event.frame_number
 
@@ -132,7 +139,7 @@ class Ui(Worker):
         # Draw frame
         self.screen.blit(frame_surface, (0, 0))
 
-        # Draw detection boxes
+        # Draw detection boxes using self.current_detections
         for detection in self.current_detections:
             # Get normalized bbox coordinates
             norm_x1, norm_y1, norm_x2, norm_y2 = detection["bbox"]
@@ -180,7 +187,7 @@ class Ui(Worker):
         text_rect.topright = (self.display_config["window_size"][0] - 10, 10)
         self.screen.blit(frame_text, text_rect)
 
-        # Draw profiling data
+        # Draw profiling data using self.worker_profiles
         y = 10
         for worker_name, task_time in self.worker_profiles.items():
             text = self.profile_font.render(f"{worker_name}: {task_time*1000:.1f}ms", True, (255, 255, 255))
@@ -190,31 +197,6 @@ class Ui(Worker):
         # Update display
         pygame.display.flip()
         self.display_config["last_frame_time"] = time.time()
-
-    def __call__(self, event: Event) -> None:
-        """Handle incoming events.
-
-        Args:
-            event: Event to handle
-        """
-        if event.event_name == "frame":
-            # Store the full event
-            self.current_frame_event = event
-        elif event.event_name == "detection":
-            self.current_detections = event.data
-        elif event.event_name == "worker_profile":
-            # Update profiling data for the worker
-            worker_name = event.worker_name
-            task_time = event.data["task_time"]  # Extract task_time from profile data
-            self.worker_profiles[worker_name] = task_time
-        elif event.event_name == "command":
-            # Handle command events
-            if event.data == "quit":
-                self.logger.warning("Received quit event")
-                self._stop_event.set()
-                return
-        else:
-            self.logger.debug("Received unknown event: %s", event.event_name)
 
     def _finish(self) -> None:
         """Clean up pygame resources."""

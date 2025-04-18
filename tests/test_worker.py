@@ -25,9 +25,13 @@ class TestWorker(Worker):
     def _task(self):
         """Mock task implementation."""
         self.task_called = True
+        # Process any pending events
+        events = self._get_latest_events_and_clear()
+        for event in events.values():
+            self._process_event(event)
         time.sleep(0.01)  # Small sleep to simulate work
 
-    def __call__(self, event):
+    def _process_event(self, event):
         """Handle test events."""
         self.event_handled = True
         self.last_event = event
@@ -52,7 +56,7 @@ class TestBaseWorker(unittest.TestCase):
         self.assertEqual(self.worker.config, self.config)
         self.assertIsNotNone(self.worker.logger)
         self.assertFalse(self.worker._stop_event.is_set())
-        self.assertIsNone(self.worker._run_thread)
+        self.assertIsNotNone(self.worker._event_lock)
         self.assertEqual(self.worker._profile_window, 1.0)
 
     def test_start_stop(self):
@@ -119,20 +123,27 @@ class TestBaseWorker(unittest.TestCase):
         self.assertTrue(self.worker.task_called)
         self.assertTrue(self.worker.finish_called)
 
-    def test_event_queue_processing(self):
-        """Test processing of multiple events in queue."""
-        events = [Event("other_worker", f"test_event_{i}", {"test": f"data_{i}"}) for i in range(3)]
+    def test_event_handling_latest_only(self):
+        """Test that only latest events are processed."""
+        events = [
+            Event("other_worker", "test_event", {"test": "data1"}),
+            Event("other_worker", "test_event", {"test": "data2"})  # Same event type
+        ]
 
-        # Add events to queue
+        self.worker.start(self.mock_controller)
+
+        # Dispatch events in quick succession
         for event in events:
-            self.worker._event_queue.put(event)
+            self.worker._dispatch(event)
 
-        # Process events
-        for _ in range(len(events)):
-            self.worker._process_events()
+        # Wait briefly for event processing
+        time.sleep(0.1)
 
-        # Check all events were processed in order
+        # Check only the latest event was processed
+        self.assertTrue(self.worker.event_handled)
         self.assertEqual(self.worker.last_event, events[-1])
+
+        self.worker.stop()
 
     def test_error_handling(self):
         """Test error handling in run loop."""
