@@ -118,7 +118,7 @@ class Detector(Worker):
         frame_number = frame_event.frame_number
 
         # Log which frame we're processing
-        self.logger.info("Processing frame %d (Task)", frame_number)
+        self.logger.info("Processing frame %d", frame_number)
 
         # Run detection with verbose=False to suppress YOLO's default logging
         start_time = time.perf_counter()

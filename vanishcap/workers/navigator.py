@@ -50,6 +50,10 @@ class Navigator(Worker):
             target_y = target["y"]
             self.logger.debug("Target position: (%.2f, %.2f)", target_x, target_y)
 
+            # Get normalized bounding box coordinates
+            target_bbox = target["bbox"]
+            self.logger.debug("Target bounding box: %s", target_bbox)
+
             # Emit target event with normalized coordinates and frame number
             self._emit(
                 Event(
@@ -59,6 +63,7 @@ class Navigator(Worker):
                         "x": target_x,
                         "y": target_y,
                         "confidence": target["confidence"],
+                        "bbox": target_bbox,
                     },
                     frame_number=frame_number,
                 )

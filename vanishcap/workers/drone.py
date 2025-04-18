@@ -19,6 +19,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
                 - max_linear_velocity: Maximum linear velocity in cm/s (default: 50)
                 - max_angular_velocity: Maximum angular velocity in deg/s (default: 50)
+                - max_vertical_velocity: Maximum vertical velocity in cm/s (default: 30)
                 - follow_distance: Distance to maintain from target in cm (default: 100)
                 - movement_threshold: Minimum movement threshold in normalized coordinates [-1, 1] (default: 0.1)
                 - field_of_view: Width of camera field of view in degrees (default: 82.6)
@@ -26,29 +27,41 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - offline: Whether to run in offline mode (default: false)
                 - percent_angle_to_command: Percentage of target angle to rotate in each yaw command
                   [0, 100] (default: 100)
+                - disable_yaw: Whether to disable yaw rotation (default: false)
+                - disable_xy: Whether to disable forward/backward and left/right movement (default: false)
+                - disable_z: Whether to disable up/down movement (default: false)
         """
         super().__init__("drone", config)
 
         # Configuration
         self.max_linear_velocity = config.get("max_linear_velocity", 50)
         self.max_angular_velocity = config.get("max_angular_velocity", 50)
+        self.max_vertical_velocity = config.get("max_vertical_velocity", 30)
         self.follow_distance = config.get("follow_distance", 100)
         self.movement_threshold = config.get("movement_threshold", 0.1)  # Now in [-1, 1] range
         self.field_of_view = config.get("field_of_view", 82.6)  # FOV in degrees
         self.auto_takeoff = config.get("auto_takeoff", False)  # Take off without target
         self.offline = config.get("offline", False)
         self.percent_angle_to_command = config.get("percent_angle_to_command", 100)  # Default to 100%
+        self.disable_yaw = config.get("disable_yaw", False)
+        self.disable_xy = config.get("disable_xy", False)
+        self.disable_z = config.get("disable_z", False)
         self.logger.debug(
-            "Initialized drone worker with max_linear_velocity=%d, max_angular_velocity=%d, follow_distance=%d, "
-            "movement_threshold=%.2f, field_of_view=%.1f, auto_takeoff=%s, offline=%s, percent_angle_to_command=%d%%",
+            "Initialized drone worker with max_linear_velocity=%d, max_angular_velocity=%d, max_vertical_velocity=%d, "
+            "follow_distance=%d, movement_threshold=%.2f, field_of_view=%.1f, auto_takeoff=%s, offline=%s, "
+            "percent_angle_to_command=%d%%, disable_yaw=%s, disable_xy=%s, disable_z=%s",
             self.max_linear_velocity,
             self.max_angular_velocity,
+            self.max_vertical_velocity,
             self.follow_distance,
             self.movement_threshold,
             self.field_of_view,
             self.auto_takeoff,
             self.offline,
             self.percent_angle_to_command,
+            self.disable_yaw,
+            self.disable_xy,
+            self.disable_z,
         )
 
         # Initialize drone connection if not offline
@@ -105,8 +118,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             *args: Arguments to pass to the command
         """
         self.logger.info("Dispatching command %s with args %s", command, args)
-        if self.offline:
-            return
 
         # Handle state changes before executing commands
         if command == "land":
@@ -119,7 +130,11 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             # Get the command method from the drone
             cmd_method = getattr(self.drone, command)
             # Call the command with the provided arguments
-            cmd_method(*args)
+            if self.offline:
+                if command == "takeoff":
+                    time.sleep(3)
+            else:
+                cmd_method(*args)
             self.logger.debug("Successfully executed command %s", command)
 
             # Handle state changes for specific commands
@@ -154,8 +169,8 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.current_target["processed"] = False  # Initialize processed flag
             self.current_target["frame_number"] = latest_target_event.frame_number  # Store frame number
             self.last_target_time = current_time # Update last seen time
-            self.logger.debug("Received new target position (frame %d): (%.2f, %.2f)",
-                             latest_target_event.frame_number, self.current_target["x"], self.current_target["y"])
+            self.logger.debug("Received new target position (frame %d): (%.2f, %.2f), current target: %s",
+                             latest_target_event.frame_number, self.current_target["x"], self.current_target["y"], self.current_target)
 
             # Start flying if not already
             if not self.is_flying and not self.auto_takeoff:
@@ -243,10 +258,16 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         norm_x = self.current_target["x"]
         norm_y = self.current_target["y"]
         confidence = self.current_target.get("confidence", 0.0)
+
+        # Get bounding box coordinates
+        bbox = self.current_target.get("bbox", [0, 0, 0, 0])  # [x1, y1, x2, y2] in normalized coordinates
+        top_y = -bbox[1]  # y1 is the top of the bounding box
+
         self.logger.debug(
-            "Target position: (%.2f, %.2f), confidence: %.2f",
+            "Target position: (%.2f, %.2f), top_y: %.2f, confidence: %.2f",
             norm_x,
             norm_y,
+            top_y,
             confidence,
         )
 
@@ -257,15 +278,25 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         # Invert y-axis since positive y means target is below (drone should move forward)
         fb_velocity = -norm_y * self.max_linear_velocity
 
+        # Calculate up/down movement to keep the top of the target at y = 0 (center of frame)
+        target_top_y = 0.5
+        ud_velocity = (top_y - target_top_y) * self.max_vertical_velocity
+
         # Apply confidence-based scaling
         fb_velocity *= confidence
+        ud_velocity *= confidence
 
-        # Convert velocity to normalized RC command value
+        # Convert velocities to normalized RC command values
         fb_rc = self._normalize_velocity(fb_velocity, self.max_linear_velocity)
+        ud_rc = self._normalize_velocity(ud_velocity, self.max_vertical_velocity)
+        self.logger.debug("up/down params: top_y=%.2f, target_top_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
+                         top_y, target_top_y, ud_velocity, ud_rc)
 
         # Only move if offset is significant
         if abs(norm_y) < self.movement_threshold:
             fb_rc = 0
+        if abs(top_y - target_top_y) < self.movement_threshold:
+            ud_rc = 0
 
         # Handle yaw movement with timing
         if abs(norm_x) >= self.movement_threshold:
@@ -281,11 +312,11 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 self.yaw_duration,
                 yaw_rc
             )
-            self._dispatch_command("send_rc_control", 0, fb_rc, 0, yaw_rc)
+            self._dispatch_command("send_rc_control", 0, fb_rc if not self.disable_xy else 0, ud_rc if not self.disable_z else 0, yaw_rc if not self.disable_yaw else 0)
         else:
-            # Just handle forward/backward movement
-            self.logger.debug("Movement command - fb: %d (threshold: %.2f)", fb_rc, self.movement_threshold)
-            self._dispatch_command("send_rc_control", 0, fb_rc, 0, 0)
+            # Just handle forward/backward and up/down movement
+            self.logger.debug("Movement command - fb: %d, ud: %d (threshold: %.2f)", fb_rc, ud_rc, self.movement_threshold)
+            self._dispatch_command("send_rc_control", 0, fb_rc if not self.disable_xy else 0, ud_rc if not self.disable_z else 0, 0)
 
         # Mark target as processed
         self.current_target["processed"] = True

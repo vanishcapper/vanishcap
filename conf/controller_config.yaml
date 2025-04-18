@@ -44,7 +44,10 @@ drone:
   field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
   percent_angle_to_command: 20 # Percentage of target angle to rotate in each yaw command [0, 100]
   auto_takeoff: true # Whether to take off automatically without waiting for a target
-  log_level: INFO
+  disable_yaw: false # Whether to disable yaw rotation
+  disable_xy: true # Whether to disable forward/backward and left/right movement
+  disable_z: false # Whether to disable up/down movement
+  log_level: DEBUG
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start
   events:
