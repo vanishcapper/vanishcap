@@ -154,6 +154,10 @@ class Ui(Worker):
             x2 = int(x2 * self.display_config["window_size"][0] / orig_width)
             y2 = int(y2 * self.display_config["window_size"][1] / orig_height)
 
+            # Flip vertical coordinates
+            window_height = self.display_config["window_size"][1]
+            y1, y2 = window_height - y2, window_height - y1
+
             # Draw rectangle
             pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2 - x1, y2 - y1), 2)
 

@@ -77,22 +77,26 @@ class Detector(Worker):
         # Initialize state
         self.frame_count = 0
 
-    def _normalize_coordinates(self, x: float, y: float, width: float, height: float) -> tuple[float, float]:
-        """Normalize coordinates to [-1, 1] range.
+    def _normalize_coordinates(
+        self, coords: tuple[float, float, float, float], width: float, height: float
+    ) -> tuple[float, float, float, float]:
+        """Normalize coordinates to [-1, 1] range and swap tl,br -> bl,tr.
 
         Args:
-            x: X coordinate in pixels
-            y: Y coordinate in pixels
+            coords: Tuple of (x1, y1, x2, y2) coordinates in pixels
             width: Frame width in pixels
             height: Frame height in pixels
 
         Returns:
-            tuple[float, float]: Normalized (x, y) coordinates in [-1, 1] range
+            tuple[float, float, float, float]: Normalized (x1, y1, x2, y2) coordinates in [-1, 1] range
         """
+        x1, y1, x2, y2 = coords
         # Convert to [-1, 1] range
-        norm_x = (x / width) * 2 - 1
-        norm_y = (y / height) * 2 - 1
-        return norm_x, norm_y
+        norm_x1 = (x1 / width) * 2 - 1
+        norm_y1 = -((y2 / height) * 2 - 1)
+        norm_x2 = (x2 / width) * 2 - 1
+        norm_y2 = -((y1 / height) * 2 - 1)
+        return norm_x1, norm_y1, norm_x2, norm_y2
 
     def _task(self) -> None:  # pylint: disable=too-many-locals
         """Run one iteration of the detector loop: get latest events and process frame."""
@@ -144,9 +148,8 @@ class Detector(Worker):
                 class_id = int(box.cls[0])
                 class_name = self.model.names[class_id]
 
-                # Normalize bounding box coordinates to [-1, 1] range
-                norm_x1, norm_y1 = self._normalize_coordinates(x1, y1, width, height)
-                norm_x2, norm_y2 = self._normalize_coordinates(x2, y2, width, height)
+                # Normalize bounding box coordinates to [-1, 1] range and swap to bl -> tr
+                norm_x1, norm_y1, norm_x2, norm_y2 = self._normalize_coordinates((x1, y1, x2, y2), width, height)
 
                 # Calculate center point in normalized coordinates
                 center_x = (norm_x1 + norm_x2) / 2
@@ -154,13 +157,17 @@ class Detector(Worker):
 
                 # Log detection details
                 self.logger.debug(
-                    "Detected %s (%.2f) at (%.2f, %.2f) - (%.2f, %.2f)",
+                    "Detected %s (%.2f) at (%.2f, %.2f) - (%.2f, %.2f): orig coords: (%f, %f, %f, %f)",
                     class_name,
                     confidence,
                     norm_x1,
                     norm_y1,
                     norm_x2,
                     norm_y2,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
                 )
 
                 detections.append(

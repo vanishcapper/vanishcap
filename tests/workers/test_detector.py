@@ -97,22 +97,32 @@ class TestDetector(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         """Test coordinate normalization."""
         detector = Detector(self.config)
         # Set image dimensions required by the method
-        # These were implicitly assumed before but are needed for the method signature
         img_width = 640
         img_height = 640
 
-        # Test normalization with different values, passing width and height
-        norm_x, norm_y = detector._normalize_coordinates(320, 320, img_width, img_height)
-        self.assertEqual(norm_x, 0.0)
-        self.assertEqual(norm_y, 0.0)
+        # Test normalization with different values
+        norm_x1, norm_y1, norm_x2, norm_y2 = detector._normalize_coordinates(
+            (320, 320, 320, 320), img_width, img_height
+        )
+        self.assertEqual(norm_x1, 0.0)
+        self.assertEqual(norm_y1, 0.0)
+        self.assertEqual(norm_x2, 0.0)
+        self.assertEqual(norm_y2, 0.0)
 
-        norm_x, norm_y = detector._normalize_coordinates(640, 640, img_width, img_height)
-        self.assertEqual(norm_x, 1.0)
-        self.assertEqual(norm_y, 1.0)
+        norm_x1, norm_y1, norm_x2, norm_y2 = detector._normalize_coordinates((0, 0, 640, 640), img_width, img_height)
+        self.assertEqual(norm_x1, -1.0)
+        self.assertEqual(norm_y1, -1.0)  # y2 is flipped and negated
+        self.assertEqual(norm_x2, 1.0)
+        self.assertEqual(norm_y2, 1.0)  # y1 is flipped and negated
 
-        norm_x, norm_y = detector._normalize_coordinates(0, 0, img_width, img_height)
-        self.assertEqual(norm_x, -1.0)
-        self.assertEqual(norm_y, -1.0)
+        # Test a bounding box in the middle
+        norm_x1, norm_y1, norm_x2, norm_y2 = detector._normalize_coordinates(
+            (160, 160, 480, 480), img_width, img_height
+        )
+        self.assertEqual(norm_x1, -0.5)
+        self.assertEqual(norm_y1, -0.5)  # y2 is flipped and negated
+        self.assertEqual(norm_x2, 0.5)
+        self.assertEqual(norm_y2, 0.5)  # y1 is flipped and negated
 
     def test_event_handling(self):
         """Test event handling."""

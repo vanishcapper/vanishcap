@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict, Optional
 
 from djitellopy import Tello
+from vanishcap.event import Event
 from vanishcap.worker import Worker
 
 
@@ -30,6 +31,8 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - disable_yaw: Whether to disable yaw rotation (default: false)
                 - disable_xy: Whether to disable forward/backward and left/right movement (default: false)
                 - disable_z: Whether to disable up/down movement (default: false)
+                - follow_target_height: Where on the target's height to center (default: 0.0)
+                  0.0 means center the top of the target, 1.0 means center the bottom
         """
         super().__init__("drone", config)
 
@@ -46,10 +49,11 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.disable_yaw = config.get("disable_yaw", False)
         self.disable_xy = config.get("disable_xy", False)
         self.disable_z = config.get("disable_z", False)
+        self.follow_target_height = config.get("follow_target_height", 0.0)  # Default to centering top of target
         self.logger.debug(
             "Initialized drone worker with max_linear_velocity=%d, max_angular_velocity=%d, max_vertical_velocity=%d, "
             "follow_distance=%d, movement_threshold=%.2f, field_of_view=%.1f, auto_takeoff=%s, offline=%s, "
-            "percent_angle_to_command=%d%%, disable_yaw=%s, disable_xy=%s, disable_z=%s",
+            "percent_angle_to_command=%d%%, disable_yaw=%s, disable_xy=%s, disable_z=%s, follow_target_height=%.2f",
             self.max_linear_velocity,
             self.max_angular_velocity,
             self.max_vertical_velocity,
@@ -62,6 +66,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.disable_yaw,
             self.disable_xy,
             self.disable_z,
+            self.follow_target_height,
         )
 
         # Initialize drone connection if not offline
@@ -150,47 +155,54 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         except RuntimeError as e:
             self.logger.error("Runtime error dispatching command %s: %s", command, e)
 
-    def _task(self) -> None:
-        """Run one iteration of the drone control loop."""
-        current_time = time.time()
+    def _process_target_event(self, latest_target_event: Event, current_time: float) -> None:
+        """Process a new target event.
 
-        # Get latest events and find the latest target event
-        latest_target_event = self._get_latest_events_and_clear().get("target", None)
+        Args:
+            latest_target_event: The latest target event to process
+            current_time: Current time in seconds
+        """
+        # If we're executing a yaw and receive a new target, reset yaw execution
+        if self.executing_yaw:
+            self.executing_yaw = False
+            self.logger.debug("New target detected - resetting yaw rotation")
 
-        # Process the latest target event if found
-        if latest_target_event is not None:
-            # If we're executing a yaw and receive a new target, reset yaw execution
-            if self.executing_yaw:
-                self.executing_yaw = False
-                self.logger.debug("New target detected - resetting yaw rotation")
+        # Update target position from the latest event
+        self.current_target = latest_target_event.data
+        self.current_target["processed"] = False  # Initialize processed flag
+        self.current_target["frame_number"] = latest_target_event.frame_number  # Store frame number
+        self.last_target_time = current_time  # Update last seen time
+        self.logger.debug(
+            "Received new target position (frame %d): (%.2f, %.2f), bbox: (%f, %f, %f, %f)",
+            latest_target_event.frame_number,
+            self.current_target["x"],
+            self.current_target["y"],
+            self.current_target["bbox"][0],
+            self.current_target["bbox"][1],
+            self.current_target["bbox"][2],
+            self.current_target["bbox"][3],
+        )
 
-            # Update target position from the latest event
-            self.current_target = latest_target_event.data
-            self.current_target["processed"] = False  # Initialize processed flag
-            self.current_target["frame_number"] = latest_target_event.frame_number  # Store frame number
-            self.last_target_time = current_time  # Update last seen time
-            self.logger.debug(
-                "Received new target position (frame %d): (%.2f, %.2f), current target: %s",
-                latest_target_event.frame_number,
-                self.current_target["x"],
-                self.current_target["y"],
-                self.current_target,
-            )
+        # Start flying if not already
+        if not self.is_flying and not self.auto_takeoff:
+            self.logger.debug("Target detected - taking off")
+            self._dispatch_command("takeoff")
+            self.is_flying = True  # State change occurs after successful command dispatch
 
-            # Start flying if not already
-            if not self.is_flying and not self.auto_takeoff:
-                self.logger.debug("Target detected - taking off")
-                self._dispatch_command("takeoff")
-                self.is_flying = True  # State change occurs after successful command dispatch
-
-        # Check if we should auto takeoff (only if no target found yet)
-        elif self.auto_takeoff and not self.is_flying:
+    def _handle_auto_takeoff(self) -> None:
+        """Handle auto takeoff if enabled and no target is found."""
+        if self.auto_takeoff and not self.is_flying:
             self.logger.info("Auto takeoff enabled - taking off")
             self._dispatch_command("takeoff")
             self.is_flying = True
             self.stop_movement()
 
-        # Check if we have a valid target and are ready to process it
+    def _process_current_target(self, current_time: float) -> None:
+        """Process the current target if valid.
+
+        Args:
+            current_time: Current time in seconds
+        """
         if self.current_target and (current_time - self.last_target_time) < self.target_timeout:
             if not self.current_target.get("processed", False):
                 frame_number = self.current_target.get("frame_number")
@@ -215,6 +227,27 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
             self.logger.debug("No valid target - stopping movement")
             self.stop_movement()
+
+    def _task(self) -> None:
+        """Run one iteration of the drone control loop."""
+        # Log current drone state
+        if not self.offline:
+            state = self.drone.get_current_state()
+            self.logger.debug("Current drone state: %s", state)
+
+        current_time = time.time()
+
+        # Get latest events and find the latest target event
+        latest_target_event = self._get_latest_events_and_clear().get("target", None)
+
+        # Process the latest target event if found
+        if latest_target_event is not None:
+            self._process_target_event(latest_target_event, current_time)
+        else:
+            self._handle_auto_takeoff()
+
+        # Process current target
+        self._process_current_target(current_time)
 
         # Check if current yaw command has completed
         if self.executing_yaw and current_time >= self.yaw_start_time + self.yaw_duration:
@@ -270,13 +303,14 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         # Get bounding box coordinates
         bbox = self.current_target.get("bbox", [0, 0, 0, 0])  # [x1, y1, x2, y2] in normalized coordinates
-        top_y = -bbox[1]  # y1 is the top of the bounding box
+        target_height = bbox[3] - bbox[1]  # y2 - y1 = height of bounding box
+        target_y = bbox[1] + (target_height * self.follow_target_height)
 
         self.logger.debug(
-            "Target position: (%.2f, %.2f), top_y: %.2f, confidence: %.2f",
+            "Target position: (%.2f, %.2f), target_y: %.2f, confidence: %.2f",
             norm_x,
             norm_y,
-            top_y,
+            target_y,
             confidence,
         )
 
@@ -287,9 +321,9 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         # Invert y-axis since positive y means target is below (drone should move forward)
         fb_velocity = -norm_y * self.max_linear_velocity
 
-        # Calculate up/down movement to keep the top of the target at y = 0 (center of frame)
-        target_top_y = 0.5
-        ud_velocity = (top_y - target_top_y) * self.max_vertical_velocity
+        # Calculate up/down movement to keep the target point at y = 0.5 (coordinate when drone is level with target)
+        frame_center_y = 0.5
+        ud_velocity = (target_y - frame_center_y) * self.max_vertical_velocity
 
         # Apply confidence-based scaling
         fb_velocity *= confidence
@@ -299,9 +333,9 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         fb_rc = self._normalize_velocity(fb_velocity, self.max_linear_velocity)
         ud_rc = self._normalize_velocity(ud_velocity, self.max_vertical_velocity)
         self.logger.debug(
-            "up/down params: top_y=%.2f, target_top_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
-            top_y,
-            target_top_y,
+            "up/down params: target_y=%.2f, frame_center_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
+            target_y,
+            frame_center_y,
             ud_velocity,
             ud_rc,
         )
@@ -309,7 +343,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         # Only move if offset is significant
         if abs(norm_y) < self.movement_threshold:
             fb_rc = 0
-        if abs(top_y - target_top_y) < self.movement_threshold:
+        if abs(target_y - frame_center_y) < self.movement_threshold:
             ud_rc = 0
 
         # Handle yaw movement with timing

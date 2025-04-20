@@ -185,7 +185,7 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         # Expected: fb_rc and yaw_rc are calculated and sent together
         # ud_rc is calculated based on bbox[1] (top_y) = 0.5 vs target_top_y = 0.0
         # The vertical velocity is doubled due to negation of y-coordinate
-        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 40, -100, 100)
+        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 40, 0, 100)
         self.assertTrue(drone.current_target["processed"])  # Ensure target is processed
 
     def test_follow_target_threshold(self):
@@ -200,7 +200,7 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         drone._follow_target()
         # Forward/back and yaw are under threshold, but vertical movement is not
         # The vertical velocity is doubled due to negation of y-coordinate
-        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 0, -100, 0)
+        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 0, 0, 0)
 
     def test_target_timeout(self):
         """Test target timeout handling."""
@@ -216,11 +216,23 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
     def test_event_handling(self):
         """Test event handling."""
         drone = Drone(self.config)
-        event = Event("drone", "target", {"x": 0.4, "y": -0.4, "confidence": 1.0})
-        drone._dispatch(event)
+        target_event = Event(
+            "navigator",
+            "target",
+            {
+                "x": 0.4,
+                "y": -0.4,
+                "confidence": 1.0,
+                "bbox": [0.3, 0.5, 0.5, 0.7],  # Add bbox data
+            },
+            frame_number=1,
+        )
+        drone._dispatch(target_event)
         drone._task()  # Process the event
-        self.assertEqual(drone.is_flying, True)
-        self.assertEqual(getattr(drone.drone, "takeoff").call_count, 1)
+        self.assertEqual(drone.current_target["x"], 0.4)
+        self.assertEqual(drone.current_target["y"], -0.4)
+        self.assertEqual(drone.current_target["confidence"], 1.0)
+        self.assertEqual(drone.current_target["bbox"], [0.3, 0.5, 0.5, 0.7])
 
     def test_finish(self):
         """Test cleanup in finish method."""

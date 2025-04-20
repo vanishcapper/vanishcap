@@ -40,11 +40,12 @@ drone:
   max_linear_velocity: 80 # Maximum linear velocity in cm/s
   max_angular_velocity: 90 # Maximum angular velocity in deg/s
   follow_distance: 100 # Distance to maintain from target in cm
+  follow_target_height: 0.85 # Where on the target's height to center (default: 0.0)
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
   field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
   percent_angle_to_command: 20 # Percentage of target angle to rotate in each yaw command [0, 100]
   auto_takeoff: true # Whether to take off automatically without waiting for a target
-  disable_yaw: false # Whether to disable yaw rotation
+  disable_yaw: true # Whether to disable yaw rotation
   disable_xy: true # Whether to disable forward/backward and left/right movement
   disable_z: false # Whether to disable up/down movement
   log_level: DEBUG
