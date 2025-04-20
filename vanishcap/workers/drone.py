@@ -34,6 +34,8 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - disable_z: Whether to disable up/down movement (default: false)
                 - follow_target_height: Where on the target's height to center (default: 0.0)
                   0.0 means center the top of the target, 1.0 means center the bottom
+                - follow_target_width: Target width as a proportion of frame width (default: 0.3)
+                  Used to control forward/backward movement when target is fully in frame
         """
         super().__init__("drone", config)
 
@@ -53,12 +55,13 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.disable_yaw = config.get("disable_yaw", False)
         self.disable_xy = config.get("disable_xy", False)
         self.disable_z = config.get("disable_z", False)
-        self.follow_target_height = config.get("follow_target_height", 0.0)  # Default to centering top of target
+        self.follow_target_height = config.get("follow_target_height", 0.85)  # Default to centering top of target
+        self.follow_target_width = config.get("follow_target_width", 0.3)  # Default to 30% of frame width
         self.logger.debug(
             "Initialized drone worker with max_linear_velocity=%d, max_angular_velocity=%d, max_vertical_velocity=%d, "
             "follow_distance=%d, movement_threshold=%.2f, field_of_view=%.1f, delay_between_timed_yaws=%.2f, "
             "auto_takeoff=%s, offline=%s, percent_angle_to_command=%d%%, disable_yaw=%s, disable_xy=%s, disable_z=%s, "
-            "follow_target_height=%.2f",
+            "follow_target_height=%.2f, follow_target_width=%.2f",
             self.max_linear_velocity,
             self.max_angular_velocity,
             self.max_vertical_velocity,
@@ -73,6 +76,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.disable_xy,
             self.disable_z,
             self.follow_target_height,
+            self.follow_target_width,
         )
 
         # Initialize drone connection if not offline
@@ -302,44 +306,57 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         - Positive y = target is below center
         - Negative y = target is above center
         """
-        # Get target position in normalized coordinates [-1, 1]
-        norm_x = self.current_target["x"]
-        norm_y = self.current_target["y"]
-        confidence = self.current_target.get("confidence", 0.0)
+        # Get target position and confidence
+        target_pos = {
+            "x": self.current_target["x"],
+            "y": self.current_target["y"],
+            "confidence": self.current_target.get("confidence", 0.0),
+        }
 
         # Get bounding box coordinates
         bbox = self.current_target.get("bbox", [0, 0, 0, 0])  # [x1, y1, x2, y2] in normalized coordinates
         target_height = bbox[3] - bbox[1]  # y2 - y1 = height of bounding box
         target_y = bbox[1] + (target_height * self.follow_target_height)
+        target_width = (bbox[2] - bbox[0]) / 2  # x2 - x1 = width of bounding box
 
         self.logger.debug(
-            "Target position: (%.2f, %.2f), target_y: %.2f, confidence: %.2f",
-            norm_x,
-            norm_y,
+            "Target position: (%.2f, %.2f), target_y: %.2f, target_width: %.2f, confidence: %.2f",
+            target_pos["x"],
+            target_pos["y"],
             target_y,
-            confidence,
+            target_width,
+            target_pos["confidence"],
         )
 
         current_time = time.time()
 
-        # Calculate forward/backward movement using proportional control
-        # Scale the normalized position by max_velocity to get movement velocity
-        # Invert y-axis since positive y means target is below (drone should move forward)
-        fb_velocity = -norm_y * self.max_linear_velocity
+        # Calculate forward/backward movement using target width when target is fully in frame
+        fb_velocity = 0
+        if abs(bbox[0]) < 0.95 and abs(bbox[2]) < 0.95:  # Target is fully in frame
+            # Calculate how much we need to move to achieve target width
+            width_error = target_width - self.follow_target_width
+            fb_velocity = (
+                -width_error * self.max_linear_velocity
+            )  # Negative because we want to move forward when target is too small
 
         # Calculate up/down movement to keep the target point at y = 0.5 (coordinate when drone is level with target)
         frame_center_y = 0.5
         ud_velocity = (target_y - frame_center_y) * self.max_vertical_velocity
 
         # Apply confidence-based scaling
-        fb_velocity *= confidence
-        ud_velocity *= confidence
+        fb_velocity *= target_pos["confidence"]
+        ud_velocity *= target_pos["confidence"]
 
         # Convert velocities to normalized RC command values
         fb_rc = self._normalize_velocity(fb_velocity, self.max_linear_velocity)
         ud_rc = self._normalize_velocity(ud_velocity, self.max_vertical_velocity)
         self.logger.debug(
-            "up/down params: target_y=%.2f, frame_center_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
+            "Movement params: target_width=%.2f, width_error=%.2f, fb_velocity=%.2f, fb_rc=%.2f, "
+            "target_y=%.2f, frame_center_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
+            target_width,
+            target_width - self.follow_target_width,
+            fb_velocity,
+            fb_rc,
             target_y,
             frame_center_y,
             ud_velocity,
@@ -347,22 +364,22 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         )
 
         # Only move if offset is significant
-        if abs(norm_y) < self.movement_threshold:
+        if abs(target_width - self.follow_target_width) < self.movement_threshold:
             fb_rc = 0
         if abs(target_y - frame_center_y) < self.movement_threshold:
             ud_rc = 0
 
         # Handle yaw movement with timing
         if (
-            abs(norm_x) >= self.movement_threshold
+            abs(target_pos["x"]) >= self.movement_threshold
             and current_time - self.yaw_start_time > self.delay_between_timed_yaws
         ):
-            self.yaw_duration = self._calculate_yaw_duration(norm_x)
+            self.yaw_duration = self._calculate_yaw_duration(target_pos["x"])
             self.yaw_start_time = current_time
             self.executing_yaw = True
 
             # Use max yaw velocity in the appropriate direction
-            yaw_rc = 100 if norm_x > 0 else -100
+            yaw_rc = 100 if target_pos["x"] > 0 else -100
 
             self.logger.info("Starting timed yaw rotation: duration=%.2fs, rc=%d", self.yaw_duration, yaw_rc)
             self._dispatch_command(

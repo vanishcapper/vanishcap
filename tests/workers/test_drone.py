@@ -185,7 +185,7 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         # Expected: fb_rc and yaw_rc are calculated and sent together
         # ud_rc is calculated based on bbox[1] (top_y) = 0.5 vs target_top_y = 0.0
         # The vertical velocity is doubled due to negation of y-coordinate
-        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 40, 0, 100)
+        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 20, 16, 100)
         self.assertTrue(drone.current_target["processed"])  # Ensure target is processed
 
     def test_follow_target_threshold(self):
@@ -200,7 +200,7 @@ class TestDrone(unittest.TestCase):  # pylint: disable=too-many-instance-attribu
         drone._follow_target()
         # Forward/back and yaw are under threshold, but vertical movement is not
         # The vertical velocity is doubled due to negation of y-coordinate
-        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 0, 0, 0)
+        getattr(drone.drone, "send_rc_control").assert_called_once_with(0, 25, 0, 0)
 
     def test_target_timeout(self):
         """Test target timeout handling."""

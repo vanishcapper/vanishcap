@@ -40,7 +40,8 @@ drone:
   max_angular_velocity: 90 # Maximum angular velocity in deg/s
   max_vertical_velocity: 30 # Maximum vertical velocity in cm/s
   follow_distance: 100 # Distance to maintain from target in cm
-  follow_target_height: 0.5 # Height of target to maintain in normalized coordinates [-1, 1]
+  follow_target_width: 0.3 # Width of target to maintain in proportion of frame width
+  follow_target_height: 0.85 # Height of target to maintain in proportion of target height
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
   field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
   percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
