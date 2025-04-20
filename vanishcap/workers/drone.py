@@ -24,6 +24,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - follow_distance: Distance to maintain from target in cm (default: 100)
                 - movement_threshold: Minimum movement threshold in normalized coordinates [-1, 1] (default: 0.1)
                 - field_of_view: Width of camera field of view in degrees (default: 82.6)
+                - delay_between_timed_yaws: Delay between timed yaws in seconds (default: 1.0)
                 - auto_takeoff: Whether to take off automatically without target (default: false)
                 - offline: Whether to run in offline mode (default: false)
                 - percent_angle_to_command: Percentage of target angle to rotate in each yaw command
@@ -43,6 +44,9 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.follow_distance = config.get("follow_distance", 100)
         self.movement_threshold = config.get("movement_threshold", 0.1)  # Now in [-1, 1] range
         self.field_of_view = config.get("field_of_view", 82.6)  # FOV in degrees
+        self.delay_between_timed_yaws = config.get(
+            "delay_between_timed_yaws", 1.0
+        )  # Delay between timed yaws in seconds
         self.auto_takeoff = config.get("auto_takeoff", False)  # Take off without target
         self.offline = config.get("offline", False)
         self.percent_angle_to_command = config.get("percent_angle_to_command", 100)  # Default to 100%
@@ -52,14 +56,16 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.follow_target_height = config.get("follow_target_height", 0.0)  # Default to centering top of target
         self.logger.debug(
             "Initialized drone worker with max_linear_velocity=%d, max_angular_velocity=%d, max_vertical_velocity=%d, "
-            "follow_distance=%d, movement_threshold=%.2f, field_of_view=%.1f, auto_takeoff=%s, offline=%s, "
-            "percent_angle_to_command=%d%%, disable_yaw=%s, disable_xy=%s, disable_z=%s, follow_target_height=%.2f",
+            "follow_distance=%d, movement_threshold=%.2f, field_of_view=%.1f, delay_between_timed_yaws=%.2f, "
+            "auto_takeoff=%s, offline=%s, percent_angle_to_command=%d%%, disable_yaw=%s, disable_xy=%s, disable_z=%s, "
+            "follow_target_height=%.2f",
             self.max_linear_velocity,
             self.max_angular_velocity,
             self.max_vertical_velocity,
             self.follow_distance,
             self.movement_threshold,
             self.field_of_view,
+            self.delay_between_timed_yaws,
             self.auto_takeoff,
             self.offline,
             self.percent_angle_to_command,
@@ -347,7 +353,10 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             ud_rc = 0
 
         # Handle yaw movement with timing
-        if abs(norm_x) >= self.movement_threshold:
+        if (
+            abs(norm_x) >= self.movement_threshold
+            and current_time - self.yaw_start_time > self.delay_between_timed_yaws
+        ):
             self.yaw_duration = self._calculate_yaw_duration(norm_x)
             self.yaw_start_time = current_time
             self.executing_yaw = True
