@@ -132,7 +132,12 @@ class Detector(Worker):
         start_time = time.perf_counter()
         results = self.model(frame, verbose=False)
         processing_time = time.perf_counter() - start_time
-        self.logger.info("Frame %d detection took %.3f ms", frame_number, processing_time * 1000)
+        self.logger.info(
+            "Frame %d detection took %d ms (%d ms after frame acquisition)",
+            frame_number,
+            processing_time * 1000,
+            1000 * (time.time() - frame_event.timestamp),
+        )
 
         # Get frame dimensions
         height, width = frame.shape[:2]

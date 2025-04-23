@@ -1,37 +1,39 @@
-"""Worker for controlling the drone using DJITelloPy."""
+"""Worker for controlling the drone using a driver interface."""
 
+import importlib
 import time
 from typing import Any, Dict, Optional
 
-from djitellopy import Tello
+from vanishcap.drivers.base import BaseDroneDriver
 from vanishcap.event import Event
 from vanishcap.worker import Worker
 
 
 class Drone(Worker):  # pylint: disable=too-many-instance-attributes
-    """Worker that controls the drone using DJITelloPy."""
+    """Worker that controls the drone using a driver interface."""
 
     def __init__(self, config: Dict[str, Any]) -> None:
         """Initialize the drone worker.
 
         Args:
             config: Configuration dictionary containing:
-                - ip: IP address of the drone
+                - driver: Driver configuration dictionary containing:
+                    - name: Name of the driver to use (default: "tello")
+                    - ip: IP address of the drone (for Tello)
+                    - max_linear_velocity: Maximum linear velocity in cm/s (default: 50)
+                    - max_angular_velocity: Maximum angular velocity in deg/s (default: 50)
+                    - max_vertical_velocity: Maximum vertical velocity in cm/s (default: 30)
+                    - field_of_view: Camera field of view in degrees (default: 82.6)
+                    - disable_yaw: Whether to disable yaw rotation (default: false)
+                    - disable_xy: Whether to disable forward/backward and left/right movement (default: false)
+                    - disable_z: Whether to disable up/down movement (default: false)
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-                - max_linear_velocity: Maximum linear velocity in cm/s (default: 50)
-                - max_angular_velocity: Maximum angular velocity in deg/s (default: 50)
-                - max_vertical_velocity: Maximum vertical velocity in cm/s (default: 30)
                 - follow_distance: Distance to maintain from target in cm (default: 100)
                 - movement_threshold: Minimum movement threshold in normalized coordinates [-1, 1] (default: 0.1)
-                - field_of_view: Width of camera field of view in degrees (default: 82.6)
                 - delay_between_timed_yaws: Delay between timed yaws in seconds (default: 1.0)
                 - auto_takeoff: Whether to take off automatically without target (default: false)
-                - offline: Whether to run in offline mode (default: false)
                 - percent_angle_to_command: Percentage of target angle to rotate in each yaw command
                   [0, 100] (default: 100)
-                - disable_yaw: Whether to disable yaw rotation (default: false)
-                - disable_xy: Whether to disable forward/backward and left/right movement (default: false)
-                - disable_z: Whether to disable up/down movement (default: false)
                 - follow_target_height: Where on the target's height to center (default: 0.0)
                   0.0 means center the top of the target, 1.0 means center the bottom
                 - follow_target_width: Target width as a proportion of frame width (default: 0.3)
@@ -39,62 +41,39 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         """
         super().__init__("drone", config)
 
-        # Configuration
-        self.max_linear_velocity = config.get("max_linear_velocity", 50)
-        self.max_angular_velocity = config.get("max_angular_velocity", 50)
-        self.max_vertical_velocity = config.get("max_vertical_velocity", 30)
-        self.follow_distance = config.get("follow_distance", 100)
-        self.movement_threshold = config.get("movement_threshold", 0.1)  # Now in [-1, 1] range
-        self.field_of_view = config.get("field_of_view", 82.6)  # FOV in degrees
-        self.delay_between_timed_yaws = config.get(
-            "delay_between_timed_yaws", 1.0
-        )  # Delay between timed yaws in seconds
-        self.auto_takeoff = config.get("auto_takeoff", False)  # Take off without target
-        self.offline = config.get("offline", False)
-        self.percent_angle_to_command = config.get("percent_angle_to_command", 100)  # Default to 100%
-        self.disable_yaw = config.get("disable_yaw", False)
-        self.disable_xy = config.get("disable_xy", False)
-        self.disable_z = config.get("disable_z", False)
-        self.follow_target_height = config.get("follow_target_height", 0.85)  # Default to centering top of target
-        self.follow_target_width = config.get("follow_target_width", 0.3)  # Default to 30% of frame width
-        self.logger.debug(
-            "Initialized drone worker with max_linear_velocity=%d, max_angular_velocity=%d, max_vertical_velocity=%d, "
-            "follow_distance=%d, movement_threshold=%.2f, field_of_view=%.1f, delay_between_timed_yaws=%.2f, "
-            "auto_takeoff=%s, offline=%s, percent_angle_to_command=%d%%, disable_yaw=%s, disable_xy=%s, disable_z=%s, "
-            "follow_target_height=%.2f, follow_target_width=%.2f",
-            self.max_linear_velocity,
-            self.max_angular_velocity,
-            self.max_vertical_velocity,
-            self.follow_distance,
-            self.movement_threshold,
-            self.field_of_view,
-            self.delay_between_timed_yaws,
-            self.auto_takeoff,
-            self.offline,
-            self.percent_angle_to_command,
-            self.disable_yaw,
-            self.disable_xy,
-            self.disable_z,
-            self.follow_target_height,
-            self.follow_target_width,
-        )
+        # Get driver configuration
+        driver_config = config.get("driver", {})
+        driver_name = driver_config.get("name", "tello")
 
-        # Initialize drone connection if not offline
-        self.drone = Tello()
-        if not self.offline:
-            self.drone.connect()
-            self.logger.info("Connected to drone at IP: %s", config.get("ip", "192.168.10.1"))
-            self._dispatch_command("streamon")
-        else:
-            self.logger.warning("Running in offline mode - skipping drone connection")
+        # Dynamically import and initialize driver
+        try:
+            driver_module = importlib.import_module(f"vanishcap.drivers.{driver_name}")
+            driver_class = getattr(driver_module, f"{driver_name.title()}Driver")
+            self.driver: BaseDroneDriver = driver_class(driver_config)
+        except (ImportError, AttributeError) as e:
+            raise ValueError(f"Failed to load driver '{driver_name}': {e}") from e
+
+        # Configuration
+        self.follow_distance = config.get("follow_distance", 100)
+        self.movement_threshold = config.get("movement_threshold", 0.1)
+        self.delay_between_timed_yaws = config.get("delay_between_timed_yaws", 1.0)
+        self.auto_takeoff = config.get("auto_takeoff", False)
+        self.percent_angle_to_command = config.get("percent_angle_to_command", 100)
+        self.follow_target_height = config.get("follow_target_height", 0.85)
+        self.follow_target_width = config.get("follow_target_width", 0.3)
+
+        # Initialize drone connection
+        self.driver.connect()
+        self.logger.info("Connected to drone using %s driver", driver_name)
+        self.driver.streamon()
 
         # State
         self.is_flying = False
-        self.is_stopped = True  # Track if we're currently stopped
-        self.ready_to_process_targets = False  # Track if we're ready to process targets
+        self.is_stopped = True
+        self.ready_to_process_targets = False
         self.current_target: Optional[Dict[str, float]] = None
         self.last_target_time = 0.0
-        self.target_timeout = 1.0  # seconds
+        self.target_timeout = 1.0
         self.yaw_start_time = 0.0
         self.yaw_duration = 0.0
         self.executing_yaw = False
@@ -102,7 +81,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
     def stop_movement(self) -> None:
         """Stop all drone movement by sending zero RC commands."""
         if not self.is_stopped:
-            self._dispatch_command("send_rc_control", 0, 0, 0, 0)
+            self.driver.send_rc_control(0, 0, 0, 0)
             self.is_stopped = True
             self.logger.debug("Drone stopped")
 
@@ -116,17 +95,12 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         Returns:
             Normalized RC command value in range [-100, 100]
         """
-        # Calculate normalized value in range [-1, 1]
         normalized = velocity / max_velocity
-
-        # Convert to RC command range [-100, 100]
         rc_value = int(normalized * 100)
-
-        # Clamp to valid range
         return max(min(rc_value, 100), -100)
 
     def _dispatch_command(self, command: str, *args: Any) -> None:
-        """Dispatch a command to the drone.
+        """Dispatch a command to the drone driver.
 
         Args:
             command: Name of the command to dispatch
@@ -134,7 +108,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         """
         self.logger.info("Dispatching command %s with args %s", command, args)
 
-        # Handle state changes before executing commands
         if command == "land":
             self.ready_to_process_targets = False
             self.logger.debug("Preparing to land - no longer ready to process targets")
@@ -142,17 +115,10 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.ready_to_process_targets = False
 
         try:
-            # Get the command method from the drone
-            cmd_method = getattr(self.drone, command)
-            # Call the command with the provided arguments
-            if self.offline:
-                if command == "takeoff":
-                    time.sleep(3)
-            else:
-                cmd_method(*args)
+            cmd_method = getattr(self.driver, command)
+            cmd_method(*args)
             self.logger.debug("Successfully executed command %s", command)
 
-            # Handle state changes for specific commands
             if command == "takeoff":
                 self.ready_to_process_targets = True
                 self.logger.debug("Takeoff successful - ready to process targets")
@@ -172,16 +138,14 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             latest_target_event: The latest target event to process
             current_time: Current time in seconds
         """
-        # If we're executing a yaw and receive a new target, reset yaw execution
         if self.executing_yaw:
             self.executing_yaw = False
             self.logger.debug("New target detected - resetting yaw rotation")
 
-        # Update target position from the latest event
         self.current_target = latest_target_event.data
-        self.current_target["processed"] = False  # Initialize processed flag
-        self.current_target["frame_number"] = latest_target_event.frame_number  # Store frame number
-        self.last_target_time = current_time  # Update last seen time
+        self.current_target["processed"] = False
+        self.current_target["frame_number"] = latest_target_event.frame_number
+        self.last_target_time = current_time
         self.logger.debug(
             "Received new target position (frame %d): (%.2f, %.2f), bbox: (%f, %f, %f, %f)",
             latest_target_event.frame_number,
@@ -193,11 +157,10 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.current_target["bbox"][3],
         )
 
-        # Start flying if not already
         if not self.is_flying and not self.auto_takeoff:
             self.logger.debug("Target detected - taking off")
             self._dispatch_command("takeoff")
-            self.is_flying = True  # State change occurs after successful command dispatch
+            self.is_flying = True
 
     def _handle_auto_takeoff(self) -> None:
         """Handle auto takeoff if enabled and no target is found."""
@@ -230,7 +193,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         else:
             self.current_target = None
 
-            # Stop movement and reset yaw execution if target is lost
             if self.executing_yaw:
                 self.executing_yaw = False
                 self.logger.debug("Target lost - stopping yaw rotation")
@@ -240,26 +202,19 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
     def _task(self) -> None:
         """Run one iteration of the drone control loop."""
-        # Log current drone state
-        if not self.offline:
-            state = self.drone.get_current_state()
-            self.logger.debug("Current drone state: %s", state)
+        state = self.driver.get_current_state()
+        self.logger.debug("Current drone state: %s", state)
 
         current_time = time.time()
-
-        # Get latest events and find the latest target event
         latest_target_event = self._get_latest_events_and_clear().get("target", None)
 
-        # Process the latest target event if found
         if latest_target_event is not None:
             self._process_target_event(latest_target_event, current_time)
         else:
             self._handle_auto_takeoff()
 
-        # Process current target
         self._process_current_target(current_time)
 
-        # Check if current yaw command has completed
         if self.executing_yaw and current_time >= self.yaw_start_time + self.yaw_duration:
             self.executing_yaw = False
             self.logger.debug("Completed yaw rotation - stopping yaw")
@@ -274,17 +229,9 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         Returns:
             Duration in seconds needed for the yaw command
         """
-        # Calculate the target's angular offset in degrees
-        # norm_x range is [-1, 1], so multiply by half the FOV to get degrees
-        angular_offset = norm_x * (self.field_of_view / 2)
-
-        # Scale the angular offset by the percentage we want to rotate
-        # Convert percentage to proportion by dividing by 100
+        angular_offset = norm_x * (self.driver.get_field_of_view() / 2)
         scaled_angular_offset = angular_offset * (self.percent_angle_to_command / 100.0)
-
-        # Calculate how long we need to rotate at max_angular_velocity to cover this angle
-        # Using absolute value since we care about magnitude, not direction
-        duration = abs(scaled_angular_offset) / self.max_angular_velocity
+        duration = abs(scaled_angular_offset) / self.driver.get_max_angular_velocity()
 
         self.logger.debug(
             "Angular offset: %.2f degrees, scaled offset: %.2f degrees "
@@ -298,26 +245,17 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         return duration
 
     def _follow_target(self) -> None:
-        """Follow the current target using proportional control.
-
-        The target position is now given in normalized coordinates [-1, 1]:
-        - Positive x = target is right of center
-        - Negative x = target is left of center
-        - Positive y = target is below center
-        - Negative y = target is above center
-        """
-        # Get target position and confidence
+        """Follow the current target using proportional control."""
         target_pos = {
             "x": self.current_target["x"],
             "y": self.current_target["y"],
             "confidence": self.current_target.get("confidence", 0.0),
         }
 
-        # Get bounding box coordinates
-        bbox = self.current_target.get("bbox", [0, 0, 0, 0])  # [x1, y1, x2, y2] in normalized coordinates
-        target_height = bbox[3] - bbox[1]  # y2 - y1 = height of bounding box
+        bbox = self.current_target.get("bbox", [0, 0, 0, 0])
+        target_height = bbox[3] - bbox[1]
         target_y = bbox[1] + (target_height * self.follow_target_height)
-        target_width = (bbox[2] - bbox[0]) / 2  # x2 - x1 = width of bounding box
+        target_width = (bbox[2] - bbox[0]) / 2
 
         self.logger.debug(
             "Target position: (%.2f, %.2f), target_y: %.2f, target_width: %.2f, confidence: %.2f",
@@ -330,46 +268,25 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         current_time = time.time()
 
-        # Calculate forward/backward movement using target width when target is fully in frame
         fb_velocity = 0
-        if abs(bbox[0]) < 0.95 and abs(bbox[2]) < 0.95:  # Target is fully in frame
-            # Calculate how much we need to move to achieve target width
+        if abs(bbox[0]) < 0.95 and abs(bbox[2]) < 0.95:
             width_error = target_width - self.follow_target_width
-            fb_velocity = (
-                -width_error * self.max_linear_velocity
-            )  # Negative because we want to move forward when target is too small
+            fb_velocity = -width_error * self.driver.get_max_linear_velocity()
 
-        # Calculate up/down movement to keep the target point at y = 0.5 (coordinate when drone is level with target)
         frame_center_y = 0.5
-        ud_velocity = (target_y - frame_center_y) * self.max_vertical_velocity
+        ud_velocity = (target_y - frame_center_y) * self.driver.get_max_vertical_velocity()
 
-        # Apply confidence-based scaling
         fb_velocity *= target_pos["confidence"]
         ud_velocity *= target_pos["confidence"]
 
-        # Convert velocities to normalized RC command values
-        fb_rc = self._normalize_velocity(fb_velocity, self.max_linear_velocity)
-        ud_rc = self._normalize_velocity(ud_velocity, self.max_vertical_velocity)
-        self.logger.debug(
-            "Movement params: target_width=%.2f, width_error=%.2f, fb_velocity=%.2f, fb_rc=%.2f, "
-            "target_y=%.2f, frame_center_y=%.2f, ud_velocity=%.2f, ud_rc=%.2f",
-            target_width,
-            target_width - self.follow_target_width,
-            fb_velocity,
-            fb_rc,
-            target_y,
-            frame_center_y,
-            ud_velocity,
-            ud_rc,
-        )
+        fb_rc = self._normalize_velocity(fb_velocity, self.driver.get_max_linear_velocity())
+        ud_rc = self._normalize_velocity(ud_velocity, self.driver.get_max_vertical_velocity())
 
-        # Only move if offset is significant
         if abs(target_width - self.follow_target_width) < self.movement_threshold:
             fb_rc = 0
         if abs(target_y - frame_center_y) < self.movement_threshold:
             ud_rc = 0
 
-        # Handle yaw movement with timing
         if (
             abs(target_pos["x"]) >= self.movement_threshold
             and current_time - self.yaw_start_time > self.delay_between_timed_yaws
@@ -378,27 +295,16 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.yaw_start_time = current_time
             self.executing_yaw = True
 
-            # Use max yaw velocity in the appropriate direction
             yaw_rc = 100 if target_pos["x"] > 0 else -100
 
             self.logger.info("Starting timed yaw rotation: duration=%.2fs, rc=%d", self.yaw_duration, yaw_rc)
-            self._dispatch_command(
-                "send_rc_control",
-                0,
-                fb_rc if not self.disable_xy else 0,
-                ud_rc if not self.disable_z else 0,
-                yaw_rc if not self.disable_yaw else 0,
-            )
+            self.driver.send_rc_control(0, fb_rc, ud_rc, yaw_rc)
         else:
-            # Just handle forward/backward and up/down movement
             self.logger.debug(
                 "Movement command - fb: %d, ud: %d (threshold: %.2f)", fb_rc, ud_rc, self.movement_threshold
             )
-            self._dispatch_command(
-                "send_rc_control", 0, fb_rc if not self.disable_xy else 0, ud_rc if not self.disable_z else 0, 0
-            )
+            self.driver.send_rc_control(0, fb_rc, ud_rc, 0)
 
-        # Mark target as processed
         self.current_target["processed"] = True
 
     def _finish(self) -> None:
@@ -408,4 +314,4 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self._dispatch_command("land")
             self.is_flying = False
         self.logger.debug("Ending drone connection")
-        self._dispatch_command("end")
+        self.driver.disconnect()

@@ -20,7 +20,7 @@ detector:
   model: yolov5nu # Base model path without extension
   backend: tensorrt # Use ONNX for cross-platform compatibility
   frame_skip: 1 # Process every frame
-  log_level: INFO # Show frame processing info
+  log_level: DEBUG # Show frame processing info
   profile_window: 2.0 # Show max task time over last 2 seconds
   depends_on: [] # No dependencies
   events:
@@ -35,26 +35,28 @@ navigator:
     - detector: detection # Receive detection events from detector
 
 drone:
-  offline: false # Whether to run in offline mode (no WiFi management)
-  ip: "192.168.10.1" # Default Tello IP address
-  max_linear_velocity: 80 # Maximum linear velocity in cm/s
-  max_angular_velocity: 120 # Maximum angular velocity in deg/s
-  follow_distance: 100 # Distance to maintain from target in cm
-  follow_target_width: 0.3 # Width of target to maintain in proportion of frame width
-  follow_target_height: 0.85 # Where on the target's height to center (default: 0.85)
-  movement_threshold: 0.1 # In normalized coordinates [-1, 1]
-  field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
-  delay_between_timed_yaws: 1.0 # Delay between timed yaws in seconds
-  percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
-  auto_takeoff: true # Whether to take off automatically without waiting for a target
-  disable_yaw: false # Whether to disable yaw rotation
-  disable_xy: false # Whether to disable forward/backward and left/right movement
-  disable_z: false # Whether to disable up/down movement
   log_level: DEBUG
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start
   events:
     - navigator: target # Receive target events from navigator
+  driver:
+    name: "tello" # Name of the driver to use
+    ip: "192.168.10.1" # Default Tello IP address
+    max_linear_velocity: 80 # Maximum linear velocity in cm/s
+    max_angular_velocity: 300 # Maximum angular velocity in deg/s
+    max_vertical_velocity: 30 # Maximum vertical velocity in cm/s
+    field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
+    disable_yaw: false # Whether to disable yaw rotation
+    disable_xy: false # Whether to disable forward/backward and left/right movement
+    disable_z: false # Whether to disable up/down movement
+  follow_distance: 100 # Distance to maintain from target in cm
+  follow_target_width: 0.5 # Width of target to maintain in proportion of frame width
+  follow_target_height: 0.75 # Where on the target's height to center (default: 0.85)
+  movement_threshold: 0.1 # In normalized coordinates [-1, 1]
+  delay_between_timed_yaws: 0.1 # Delay between timed yaws in seconds
+  percent_angle_to_command: 50 # Percentage of target angle to rotate in each yaw command [0, 100]
+  auto_takeoff: true # Whether to take off automatically without waiting for a target
 
 ui:
   log_level: INFO # Show frame display info

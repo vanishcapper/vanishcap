@@ -92,6 +92,13 @@ class Video(Worker):
                 self._stop_event.set()
                 return
 
+            # Emit frame event with frame number
+            self.logger.info(
+                "Acquired frame %d (time since last frame: %dms)",
+                self.frame_number,
+                1000 * (current_time - self.last_frame_time),
+            )
+
             # Update last frame time
             self.last_frame_time = current_time
 
@@ -102,12 +109,6 @@ class Video(Worker):
             if self.writer is not None:
                 self.writer.write(frame)
 
-            # Emit frame event with frame number
-            self.logger.info(
-                "Acquired frame %d (time since last frame: %.3f seconds)",
-                self.frame_number,
-                current_time - self.last_frame_time,
-            )
             self._emit(Event(self.name, "frame", frame, frame_number=self.frame_number))
         except Empty:
             self.logger.warning("Video stream queue empty - stopping worker")

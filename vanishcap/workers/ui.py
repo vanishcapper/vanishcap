@@ -124,7 +124,12 @@ class Ui(Worker):
         frame_number = self.current_frame_event.frame_number
 
         # Log which frame we're displaying
-        self.logger.info("Displaying frame %d", frame_number)
+        current_time = time.time()
+        self.logger.info(
+            "Displaying frame %d %dms after it was acquired",
+            frame_number,
+            1000 * (current_time - self.current_frame_event.timestamp),
+        )
 
         # Convert frame to pygame surface
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # pylint: disable=no-member
