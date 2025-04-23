@@ -71,11 +71,10 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.is_flying = False
         self.is_stopped = True
         self.ready_to_process_targets = False
-        self.current_target: Optional[Dict[str, float]] = None
-        self.last_target_time = 0.0
-        self.target_timeout = 1.0
+        self.current_target: Optional[Dict[str, Any]] = None
         self.yaw_start_time = 0.0
         self.yaw_duration = 0.0
+        self.commanded_yaw = 0
         self.executing_yaw = False
 
     def stop_movement(self) -> None:
@@ -131,21 +130,16 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         except RuntimeError as e:
             self.logger.error("Runtime error dispatching command %s: %s", command, e)
 
-    def _process_target_event(self, latest_target_event: Event, current_time: float) -> None:
+    def _process_target_event(self, latest_target_event: Event) -> None:
         """Process a new target event.
 
         Args:
             latest_target_event: The latest target event to process
-            current_time: Current time in seconds
         """
-        if self.executing_yaw:
-            self.executing_yaw = False
-            self.logger.debug("New target detected - resetting yaw rotation")
-
         self.current_target = latest_target_event.data
         self.current_target["processed"] = False
         self.current_target["frame_number"] = latest_target_event.frame_number
-        self.last_target_time = current_time
+        self.current_target["timestamp"] = latest_target_event.timestamp
         self.logger.debug(
             "Received new target position (frame %d): (%.2f, %.2f), bbox: (%f, %f, %f, %f)",
             latest_target_event.frame_number,
@@ -170,33 +164,27 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.is_flying = True
             self.stop_movement()
 
-    def _process_current_target(self, current_time: float) -> None:
+    def _process_current_target(self) -> None:
         """Process the current target if valid.
 
         Args:
             current_time: Current time in seconds
         """
-        if self.current_target and (current_time - self.last_target_time) < self.target_timeout:
-            if not self.current_target.get("processed", False):
-                frame_number = self.current_target.get("frame_number")
-                if frame_number is not None:
-                    self.logger.info(
-                        "Processing frame %d with target at (%.2f, %.2f)",
-                        frame_number,
-                        self.current_target["x"],
-                        self.current_target["y"],
-                    )
-                if self.ready_to_process_targets:
-                    self._follow_target()
-                else:
-                    self.logger.debug("Not ready to process targets - skipping follow_target")
+        if self.current_target:
+            if not self.current_target["processed"] and self.ready_to_process_targets:
+                self.logger.info(
+                    "Processing frame %d with target at (%.2f, %.2f)",
+                    self.current_target["frame_number"],
+                    self.current_target["x"],
+                    self.current_target["y"],
+                )
+                self._follow_target()
+            elif not self.ready_to_process_targets:
+                self.logger.debug("Not ready to process targets - skipping follow_target")
         else:
-            self.current_target = None
-
             if self.executing_yaw:
                 self.executing_yaw = False
-                self.logger.debug("Target lost - stopping yaw rotation")
-
+                self.commanded_yaw = 0
             self.logger.debug("No valid target - stopping movement")
             self.stop_movement()
 
@@ -209,14 +197,15 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         latest_target_event = self._get_latest_events_and_clear().get("target", None)
 
         if latest_target_event is not None:
-            self._process_target_event(latest_target_event, current_time)
+            self._process_target_event(latest_target_event)
         else:
             self._handle_auto_takeoff()
 
-        self._process_current_target(current_time)
+        self._process_current_target()
 
         if self.executing_yaw and current_time >= self.yaw_start_time + self.yaw_duration:
             self.executing_yaw = False
+            self.commanded_yaw = 0
             self.logger.debug("Completed yaw rotation - stopping yaw")
             self.stop_movement()
 
@@ -229,7 +218,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         Returns:
             Duration in seconds needed for the yaw command
         """
-        angular_offset = norm_x * (self.driver.get_field_of_view() / 2)
+        angular_offset = norm_x * (self.driver.get_field_of_view() / 4)
         scaled_angular_offset = angular_offset * (self.percent_angle_to_command / 100.0)
         duration = abs(scaled_angular_offset) / self.driver.get_max_angular_velocity()
 
@@ -296,6 +285,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.executing_yaw = True
 
             yaw_rc = 100 if target_pos["x"] > 0 else -100
+            self.commanded_yaw = yaw_rc
 
             self.logger.info("Starting timed yaw rotation: duration=%.2fs, rc=%d", self.yaw_duration, yaw_rc)
             self.driver.send_rc_control(0, fb_rc, ud_rc, yaw_rc)
@@ -303,7 +293,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.logger.debug(
                 "Movement command - fb: %d, ud: %d (threshold: %.2f)", fb_rc, ud_rc, self.movement_threshold
             )
-            self.driver.send_rc_control(0, fb_rc, ud_rc, 0)
+            self.driver.send_rc_control(0, fb_rc, ud_rc, self.commanded_yaw)
 
         self.current_target["processed"] = True
 

@@ -1,6 +1,5 @@
 """Tests for the drone worker."""
 
-import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -28,7 +27,6 @@ class TestDrone(unittest.TestCase):
                 "disable_z": False,
             },
             "auto_takeoff": True,
-            "target_timeout": 1.0,
             "movement_threshold": 0.1,
         }
         self.patcher_driver = patch("vanishcap.drivers.tello.TelloDriver")
@@ -49,7 +47,6 @@ class TestDrone(unittest.TestCase):
         drone = Drone(self.config)
         self.assertEqual(drone.logger.name, "vanishcap.workers.drone")
         self.assertEqual(drone.auto_takeoff, True)
-        self.assertEqual(drone.target_timeout, 1.0)
         self.assertEqual(drone.movement_threshold, 0.1)
         self.assertEqual(drone.driver.get_max_linear_velocity(), 50.0)
         self.assertEqual(drone.driver.get_max_angular_velocity(), 50.0)
@@ -61,7 +58,6 @@ class TestDrone(unittest.TestCase):
         drone = Drone({})
         self.assertEqual(drone.logger.name, "vanishcap.workers.drone")
         self.assertFalse(drone.auto_takeoff)
-        self.assertEqual(drone.target_timeout, 1.0)
         self.assertEqual(drone.movement_threshold, 0.1)
         self.assertEqual(drone.driver.get_max_linear_velocity(), 50.0)
         self.assertEqual(drone.driver.get_max_angular_velocity(), 50.0)
@@ -109,29 +105,6 @@ class TestDrone(unittest.TestCase):
         drone._follow_target()
         drone.driver.send_rc_control.assert_called_with(0, 0, 0, 0)
 
-    def test_target_timeout(self) -> None:
-        """Test target timeout handling."""
-        drone = Drone(self.config)
-        target_event = Event(
-            "test",
-            "target",
-            {
-                "x": 0.5,
-                "y": 0.5,
-                "z": 0.5,
-                "bbox": [0.3, 0.4, 0.6, 0.7],
-            },
-        )
-        current_time = time.time()
-        drone._process_target_event(target_event, current_time)
-        self.assertIsNotNone(drone.last_target_time)
-
-        # Simulate target timeout
-        with patch("time.time") as mock_time:
-            mock_time.return_value = current_time + drone.target_timeout + 1
-            drone._process_current_target(mock_time())
-            self.assertIsNone(drone.current_target)
-
     def test_event_handling(self) -> None:
         """Test event handling."""
         drone = Drone(self.config)
@@ -145,8 +118,7 @@ class TestDrone(unittest.TestCase):
                 "bbox": [0.3, 0.4, 0.6, 0.7],
             },
         )
-        current_time = time.time()
-        drone._process_target_event(target_event, current_time)
+        drone._process_target_event(target_event)
         self.assertEqual(drone.current_target["x"], target_event.data["x"])
         self.assertEqual(drone.current_target["y"], target_event.data["y"])
         self.assertEqual(drone.current_target["z"], target_event.data["z"])

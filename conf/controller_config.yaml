@@ -41,11 +41,13 @@ drone:
   events:
     - navigator: target # Receive target events from navigator
   driver:
+    log_level: DEBUG
     name: "tello" # Name of the driver to use
     ip: "192.168.10.1" # Default Tello IP address
     max_linear_velocity: 80 # Maximum linear velocity in cm/s
-    max_angular_velocity: 300 # Maximum angular velocity in deg/s
+    max_angular_velocity: 90 # Maximum angular velocity in deg/s
     max_vertical_velocity: 30 # Maximum vertical velocity in cm/s
+    max_yaw_to_command: 20
     field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
     disable_yaw: false # Whether to disable yaw rotation
     disable_xy: false # Whether to disable forward/backward and left/right movement
@@ -54,8 +56,8 @@ drone:
   follow_target_width: 0.5 # Width of target to maintain in proportion of frame width
   follow_target_height: 0.75 # Where on the target's height to center (default: 0.85)
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
-  delay_between_timed_yaws: 0.1 # Delay between timed yaws in seconds
-  percent_angle_to_command: 50 # Percentage of target angle to rotate in each yaw command [0, 100]
+  delay_between_timed_yaws: 0.0 # Delay between timed yaws in seconds
+  percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
   auto_takeoff: true # Whether to take off automatically without waiting for a target
 
 ui:

@@ -1,8 +1,9 @@
 """Base driver interface for drone control."""
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict
+
+from vanishcap.utils.logging import get_worker_logger
 
 
 # pylint: disable=too-many-instance-attributes
@@ -13,7 +14,17 @@ class BaseDroneDriver(ABC):
         """Initialize the base driver.
 
         Args:
-            config: Driver configuration dictionary
+            config: Driver configuration dictionary containing:
+                - name: Name of the driver
+                - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                - max_linear_velocity: Maximum linear velocity in cm/s (default: 50)
+                - max_angular_velocity: Maximum angular velocity in deg/s (default: 50)
+                - max_vertical_velocity: Maximum vertical velocity in cm/s (default: 30)
+                - field_of_view: Camera field of view in degrees (default: 82.6)
+                - disable_yaw: Whether to disable yaw rotation (default: false)
+                - disable_xy: Whether to disable forward/backward and left/right movement (default: false)
+                - disable_z: Whether to disable up/down movement (default: false)
+                - max_yaw_to_command: Maximum yaw command value [-100, 100] (default: 100)
         """
         self.config = config
         self.max_linear_velocity = config.get("max_linear_velocity", 50.0)
@@ -23,7 +34,10 @@ class BaseDroneDriver(ABC):
         self.disable_yaw = config.get("disable_yaw", False)
         self.disable_xy = config.get("disable_xy", False)
         self.disable_z = config.get("disable_z", False)
-        self.logger = logging.getLogger(config.get("name"))
+        self.max_yaw_to_command = config.get("max_yaw_to_command", 100)
+
+        # Configure logger using the worker logger utility
+        self.logger = get_worker_logger(config.get("name"), config.get("log_level"))
 
     @abstractmethod
     def connect(self) -> None:
@@ -69,6 +83,9 @@ class BaseDroneDriver(ABC):
             up_down = 0
         if self.disable_yaw:
             yaw = 0
+        else:
+            # Clamp yaw to max_yaw_to_command
+            yaw = max(min(yaw, self.max_yaw_to_command), -self.max_yaw_to_command)
 
         self._send_rc_control(left_right, forward_back, up_down, yaw)
 

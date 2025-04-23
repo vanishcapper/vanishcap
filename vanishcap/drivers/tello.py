@@ -44,6 +44,13 @@ class TelloDriver(BaseDroneDriver):
             up_down: Up/down velocity [-100, 100]
             yaw: Yaw velocity [-100, 100]
         """
+        self.logger.debug(
+            "Sending RC control: left_right=%d, forward_back=%d, up_down=%d, yaw=%d",
+            left_right,
+            forward_back,
+            up_down,
+            yaw,
+        )
         self.tello.send_rc_control(left_right, forward_back, up_down, yaw)
 
     def get_current_state(self) -> Dict[str, Any]:
