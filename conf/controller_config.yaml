@@ -5,7 +5,7 @@ controller:
   offline: false # Whether to run in offline mode (no WiFi management)
   wifi:
     connect:
-      ssid: "t1" # Optional: SSID to connect to before starting workers
+      ssid: "t3" # Optional: SSID to connect to before starting workers
       password: "" # Optional: Password for the SSID
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
@@ -20,7 +20,7 @@ detector:
   model: yolov5nu # Base model path without extension
   backend: tensorrt # Use ONNX for cross-platform compatibility
   frame_skip: 1 # Process every frame
-  log_level: DEBUG # Show frame processing info
+  log_level: INFO # Show frame processing info
   profile_window: 2.0 # Show max task time over last 2 seconds
   depends_on: [] # No dependencies
   events:
@@ -35,13 +35,13 @@ navigator:
     - detector: detection # Receive detection events from detector
 
 drone:
-  log_level: DEBUG
+  log_level: INFO
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start
   events:
     - navigator: target # Receive target events from navigator
   driver:
-    log_level: DEBUG
+    log_level: INFO
     name: "tello" # Name of the driver to use
     ip: "192.168.10.1" # Default Tello IP address
     max_linear_velocity: 80 # Maximum linear velocity in cm/s

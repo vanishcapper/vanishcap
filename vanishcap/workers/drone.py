@@ -343,8 +343,8 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         frame_center_y = 0.5
         # If target's top edge is above the threshold (bbox[3] > 0.95), move upward
-        if bbox[3] > 0.95 and width_error < 0:
-            ud_velocity = self.driver.get_max_vertical_velocity() / 2
+        if bbox[3] > 0.95 and width_error / self.follow_target_width < -0.1:
+            ud_velocity = self.driver.get_max_vertical_velocity() / 3
             fb_velocity = 0
         else:
             ud_velocity = (target_y - frame_center_y) * self.driver.get_max_vertical_velocity()

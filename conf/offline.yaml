@@ -19,7 +19,7 @@ detector:
   model: yolov5nu # Base model path without extension
   backend: tensorrt # Use ONNX for cross-platform compatibility
   frame_skip: 1 # Process every frame
-  log_level: DEBUG # Show frame processing info
+  log_level: INFO # Show frame processing info
   profile_window: 2.0 # Show max task time over last 2 seconds
   depends_on: [] # No dependencies
   events:
@@ -34,13 +34,13 @@ navigator:
     - detector: detection # Receive detection events from detector
 
 drone:
-  log_level: DEBUG
+  log_level: INFO
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start
   events:
     - navigator: target # Receive target events from navigator
   driver:
-    log_level: DEBUG
+    log_level: INFO
     name: "offline" # Name of the driver to use
     max_linear_velocity: 50 # Maximum linear velocity in cm/s
     max_angular_velocity: 50 # Maximum angular velocity in deg/s
