@@ -1,5 +1,7 @@
 """Worker for controlling the drone using a driver interface."""
 
+from copy import deepcopy
+from dataclasses import dataclass
 import importlib
 import time
 from typing import Any, Dict, Optional
@@ -7,6 +9,42 @@ from typing import Any, Dict, Optional
 from vanishcap.drivers.base import BaseDroneDriver
 from vanishcap.event import Event
 from vanishcap.worker import Worker
+
+
+@dataclass
+class CommandState:
+    """Represents the current RC control state of the drone.
+
+    This class stores the normalized RC control values for the drone's movement:
+    - lr: Left/right movement (-100 to 100)
+    - fb: Forward/backward movement (-100 to 100)
+    - ud: Up/down movement (-100 to 100)
+    - yaw: Yaw rotation (-100 to 100)
+
+    All values default to 0, representing no movement.
+    """
+
+    lr: int = 0
+    fb: int = 0
+    ud: int = 0
+    yaw: int = 0
+
+    def __eq__(self, other: object) -> bool:
+        """Compare this CommandState with another object for equality.
+
+        Args:
+            other: The object to compare with. Can be None, a CommandState, or any other type.
+
+        Returns:
+            bool: True if other is a CommandState with identical values, False otherwise.
+            Returns False if other is None or not a CommandState.
+        """
+        # raise NotImplementedError("CommandState equality is not implemented")
+        if other is None:
+            return False
+        if not isinstance(other, CommandState):
+            return False
+        return self.lr == other.lr and self.fb == other.fb and self.ud == other.ud and self.yaw == other.yaw
 
 
 class Drone(Worker):  # pylint: disable=too-many-instance-attributes
@@ -68,8 +106,9 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.driver.streamon()
 
         # State
+        self.current_command = CommandState()
+        self.last_command = None
         self.is_flying = False
-        self.is_stopped = True
         self.ready_to_process_targets = False
         self.current_target: Optional[Dict[str, Any]] = None
         self.yaw_start_time = 0.0
@@ -77,12 +116,24 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.commanded_yaw = 0
         self.executing_yaw = False
 
-    def stop_movement(self) -> None:
-        """Stop all drone movement by sending zero RC commands."""
-        if not self.is_stopped:
-            self.driver.send_rc_control(0, 0, 0, 0)
-            self.is_stopped = True
-            self.logger.debug("Drone stopped")
+    def update_movement(self):
+        """Update the drone's movement state and send RC commands to the driver.
+
+        This method:
+        1. Compares the current command state with the last command state
+        2. If they differ, updates the last command state and sends new RC commands
+        3. Skips sending commands if the current state is identical to the last state
+
+        The method ensures that identical commands are not sent repeatedly to the drone,
+        which helps prevent unnecessary communication and potential command queuing issues.
+        """
+        if self.last_command == self.current_command:
+            self.logger.debug("Movement command is the same as the last command - skipping")
+            return
+        self.last_command = self.current_command
+        self.driver.send_rc_control(
+            self.current_command.lr, self.current_command.fb, self.current_command.ud, self.current_command.yaw
+        )
 
     def _normalize_velocity(self, velocity: float, max_velocity: float) -> int:
         """Convert a real-world velocity to a normalized RC command value.
@@ -162,7 +213,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.logger.info("Auto takeoff enabled - taking off")
             self._dispatch_command("takeoff")
             self.is_flying = True
-            self.stop_movement()
 
     def _process_current_target(self) -> None:
         """Process the current target if valid.
@@ -184,9 +234,9 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         else:
             if self.executing_yaw:
                 self.executing_yaw = False
-                self.commanded_yaw = 0
             self.logger.debug("No valid target - stopping movement")
-            self.stop_movement()
+            self.current_command = CommandState()
+            self.update_movement()
 
     def _task(self) -> None:
         """Run one iteration of the drone control loop."""
@@ -205,9 +255,11 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         if self.executing_yaw and current_time >= self.yaw_start_time + self.yaw_duration:
             self.executing_yaw = False
-            self.commanded_yaw = 0
+            self.last_command = deepcopy(self.current_command)
+            self.current_command.yaw = 0
             self.logger.debug("Completed yaw rotation - stopping yaw")
-            self.stop_movement()
+
+        self.update_movement()
 
     def _calculate_yaw_duration(self, norm_x: float) -> float:
         """Calculate the duration needed for yaw rotation to center the target.
@@ -268,8 +320,10 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         fb_velocity *= target_pos["confidence"]
         ud_velocity *= target_pos["confidence"]
 
+        lr_rc = 0  # Implement left/right movement later
         fb_rc = self._normalize_velocity(fb_velocity, self.driver.get_max_linear_velocity())
         ud_rc = self._normalize_velocity(ud_velocity, self.driver.get_max_vertical_velocity())
+        yaw_rc = 0
 
         if abs(target_width - self.follow_target_width) < self.movement_threshold:
             fb_rc = 0
@@ -288,18 +342,16 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.commanded_yaw = yaw_rc
 
             self.logger.info("Starting timed yaw rotation: duration=%.2fs, rc=%d", self.yaw_duration, yaw_rc)
-            self.driver.send_rc_control(0, fb_rc, ud_rc, yaw_rc)
-        else:
-            self.logger.debug(
-                "Movement command - fb: %d, ud: %d (threshold: %.2f)", fb_rc, ud_rc, self.movement_threshold
-            )
-            self.driver.send_rc_control(0, fb_rc, ud_rc, self.commanded_yaw)
 
+        self.current_command = CommandState(lr=lr_rc, fb=fb_rc, ud=ud_rc, yaw=yaw_rc)
         self.current_target["processed"] = True
 
     def _finish(self) -> None:
         """Clean up resources."""
         if self.is_flying:
+            self.logger.debug("Stopping all movement before landing")
+            self.current_command = CommandState()
+            self.update_movement()
             self.logger.debug("Landing drone")
             self._dispatch_command("land")
             self.is_flying = False

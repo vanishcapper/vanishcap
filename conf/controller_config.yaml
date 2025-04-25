@@ -5,7 +5,7 @@ controller:
   offline: false # Whether to run in offline mode (no WiFi management)
   wifi:
     connect:
-      ssid: "t2" # Optional: SSID to connect to before starting workers
+      ssid: "t1" # Optional: SSID to connect to before starting workers
       password: "" # Optional: Password for the SSID
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
@@ -46,8 +46,8 @@ drone:
     ip: "192.168.10.1" # Default Tello IP address
     max_linear_velocity: 80 # Maximum linear velocity in cm/s
     max_angular_velocity: 90 # Maximum angular velocity in deg/s
-    max_vertical_velocity: 30 # Maximum vertical velocity in cm/s
-    max_yaw_to_command: 20
+    max_vertical_velocity: 50 # Maximum vertical velocity in cm/s
+    max_yaw_to_command: 50
     field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
     disable_yaw: false # Whether to disable yaw rotation
     disable_xy: false # Whether to disable forward/backward and left/right movement
@@ -57,7 +57,7 @@ drone:
   follow_target_height: 0.75 # Where on the target's height to center (default: 0.85)
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
   delay_between_timed_yaws: 0.0 # Delay between timed yaws in seconds
-  percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
+  percent_angle_to_command: 50 # Percentage of target angle to rotate in each yaw command [0, 100]
   auto_takeoff: true # Whether to take off automatically without waiting for a target
 
 ui:

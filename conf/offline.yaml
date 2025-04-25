@@ -40,6 +40,7 @@ drone:
   events:
     - navigator: target # Receive target events from navigator
   driver:
+    log_level: DEBUG
     name: "offline" # Name of the driver to use
     max_linear_velocity: 50 # Maximum linear velocity in cm/s
     max_angular_velocity: 50 # Maximum angular velocity in deg/s

@@ -28,6 +28,7 @@ class TestDrone(unittest.TestCase):
             },
             "auto_takeoff": True,
             "movement_threshold": 0.1,
+            "follow_target_height": 0.3,
         }
         self.patcher_driver = patch("vanishcap.drivers.tello.TelloDriver")
         self.mock_driver_class = self.patcher_driver.start()
@@ -87,22 +88,35 @@ class TestDrone(unittest.TestCase):
             "z": 0.5,
             "bbox": [0.3, 0.4, 0.6, 0.7],
             "processed": False,
+            "confidence": 1.0,
         }
         drone._follow_target()
+        drone.update_movement()
         drone.driver.send_rc_control.assert_called()
 
     def test_follow_target_threshold(self) -> None:
         """Test movement threshold in target following."""
         drone = Drone(self.config)
         drone.ready_to_process_targets = True
+        # Calculate target y position based on follow_target_height
+        target_height = 0.3  # Height of bounding box
+        target_y = 0.5 - (target_height * (1 - drone.follow_target_height))
+        # Position target at center with desired width to ensure no movement
+        # Note: target_width in _follow_target is half the bbox width, so we need
+        # to make the full bbox width twice follow_target_width
+        bbox_width = drone.follow_target_width * 2
+        bbox_x_min = 0.5 - bbox_width / 2
+        bbox_x_max = 0.5 + bbox_width / 2
         drone.current_target = {
-            "x": 0.01,
-            "y": 0.01,
-            "z": 0.01,
-            "bbox": [0.3, 0.4, 0.6, 0.7],
+            "x": 0.0,  # Center horizontally
+            "y": target_y,  # Position vertically based on follow_target_height
+            "z": 0.0,
+            "bbox": [bbox_x_min, 0.5 - target_height / 2, bbox_x_max, 0.5 + target_height / 2],
             "processed": False,
+            "confidence": 1.0,
         }
         drone._follow_target()
+        drone.update_movement()
         drone.driver.send_rc_control.assert_called_with(0, 0, 0, 0)
 
     def test_event_handling(self) -> None:
