@@ -17,9 +17,9 @@ from vanishcap.worker import Worker
 class TestWorker(Worker):
     """Test worker implementation."""
 
-    def __init__(self, name: str, config: dict):
+    def __init__(self, config: dict):
         """Initialize the test worker."""
-        super().__init__(name, config)
+        super().__init__(config)
         self.processed_events = []
 
     def _task(self):
@@ -43,8 +43,8 @@ class TestController(unittest.TestCase):
         # Create a configuration dictionary
         self.config = {
             "controller": {"offline": True, "log_level": "DEBUG"},
-            "test_worker": {"log_level": "DEBUG"},
-            "other_worker": {"log_level": "DEBUG"},
+            "test_worker": {"name": "test_worker", "log_level": "DEBUG"},
+            "other_worker": {"name": "other_worker", "log_level": "DEBUG"},
         }
 
         # Create temp config file
@@ -68,8 +68,8 @@ class TestController(unittest.TestCase):
     def _setup_mock_workers(self, controller):
         """Set up mock workers for testing."""
         controller.workers = {
-            "test_worker": TestWorker("test_worker", self.config["test_worker"]),
-            "other_worker": TestWorker("other_worker", self.config["other_worker"]),
+            "test_worker": TestWorker(self.config["test_worker"]),
+            "other_worker": TestWorker(self.config["other_worker"]),
         }
 
     @patch.object(Controller, "_init_workers")

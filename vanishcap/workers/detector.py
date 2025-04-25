@@ -19,12 +19,13 @@ class Detector(Worker):
 
         Args:
             config: Configuration dictionary containing:
+                - name: Name of the worker
                 - model: Base path to YOLO model (without extension)
                 - frame_skip: Number of frames to skip between detections
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
                 - backend: Optional backend to use (pytorch, tensorrt, onnx) (default: pytorch)
         """
-        super().__init__("detector", config)
+        super().__init__(config)
         self.model_base = config["model"]
         self.frame_skip = config.get("frame_skip", 1)  # Default to 1 frame
         self.backend = config.get("backend", "pytorch")

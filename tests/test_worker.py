@@ -14,9 +14,9 @@ from vanishcap.event import Event
 class TestWorker(Worker):
     """Test implementation of the Worker class."""
 
-    def __init__(self, name: str, config: dict):
+    def __init__(self, config: dict):
         """Initialize test worker."""
-        super().__init__(name, config)
+        super().__init__(config)
         self.task_called = False
         self.event_handled = False
         self.last_event = None
@@ -46,8 +46,8 @@ class TestBaseWorker(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.config = {"profile_window": 1.0, "log_level": "DEBUG"}
-        self.worker = TestWorker("test_worker", self.config)
+        self.config = {"name": "test_worker", "profile_window": 1.0, "log_level": "DEBUG"}
+        self.worker = TestWorker(self.config)
         self.mock_controller = MagicMock()
 
     def test_initialization(self):

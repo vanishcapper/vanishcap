@@ -46,7 +46,7 @@ class TestDrone(unittest.TestCase):
     def test_initialization(self) -> None:
         """Test initialization of drone worker."""
         drone = Drone(self.config)
-        self.assertEqual(drone.logger.name, "vanishcap.workers.drone")
+        self.assertEqual(drone.logger.name, "vanishcap.workers.test")
         self.assertEqual(drone.auto_takeoff, True)
         self.assertEqual(drone.movement_threshold, 0.1)
         self.assertEqual(drone.driver.get_max_linear_velocity(), 50.0)
@@ -56,7 +56,21 @@ class TestDrone(unittest.TestCase):
 
     def test_initialization_default_values(self) -> None:
         """Test initialization with default values."""
-        drone = Drone({})
+        config = {
+            "name": "drone",
+            "driver": {
+                "name": "tello",
+                "ip": "192.168.10.1",
+                "max_linear_velocity": 50.0,
+                "max_angular_velocity": 50.0,
+                "max_vertical_velocity": 30.0,
+                "field_of_view": 82.6,
+                "disable_yaw": False,
+                "disable_xy": False,
+                "disable_z": False,
+            },
+        }
+        drone = Drone(config)
         self.assertEqual(drone.logger.name, "vanishcap.workers.drone")
         self.assertFalse(drone.auto_takeoff)
         self.assertEqual(drone.movement_threshold, 0.1)

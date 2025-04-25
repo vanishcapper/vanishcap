@@ -19,7 +19,7 @@ class TestUI(unittest.TestCase):
 
     def setUp(self):  # pylint: disable=arguments-differ
         """Set up test fixtures."""
-        self.config = {"window_size": (800, 600), "fps": 30, "log_level": "DEBUG"}
+        self.config = {"name": "ui", "window_size": (800, 600), "fps": 30, "log_level": "DEBUG"}
         self.mock_frame = np.zeros((600, 800, 3), dtype=np.uint8)
 
         # Create mock surface

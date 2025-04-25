@@ -15,7 +15,7 @@ class TestNavigator(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Create test config
-        self.config = {"target_class": "person", "log_level": "DEBUG"}
+        self.config = {"name": "navigator", "target_class": "person", "log_level": "DEBUG"}
 
         # Create mock for _emit method
         self.patcher_emit = patch("vanishcap.worker.Worker._emit")

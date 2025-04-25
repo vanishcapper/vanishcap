@@ -16,7 +16,13 @@ class TestDetector(unittest.TestCase):  # pylint: disable=too-many-instance-attr
     def setUp(self):
         """Set up test fixtures."""
         # Create a configuration dictionary
-        self.config = {"model": "yolov5s", "frame_skip": 2, "log_level": "DEBUG", "backend": "pytorch"}
+        self.config = {
+            "name": "detector",
+            "model": "yolov5s",
+            "frame_skip": 2,
+            "log_level": "DEBUG",
+            "backend": "pytorch",
+        }
 
         # Create mock frame
         self.mock_frame = np.zeros((640, 640, 3), dtype=np.uint8)

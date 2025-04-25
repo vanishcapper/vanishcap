@@ -66,6 +66,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                     - disable_xy: Whether to disable forward/backward and left/right movement (default: false)
                     - disable_z: Whether to disable up/down movement (default: false)
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                - name: Name of the worker (required)
                 - follow_distance: Distance to maintain from target in cm (default: 100)
                 - movement_threshold: Minimum movement threshold in normalized coordinates [-1, 1] (default: 0.1)
                 - delay_between_timed_yaws: Delay between timed yaws in seconds (default: 1.0)
@@ -77,7 +78,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - follow_target_width: Target width as a proportion of frame width (default: 0.3)
                   Used to control forward/backward movement when target is fully in frame
         """
-        super().__init__("drone", config)
+        super().__init__(config)
 
         # Get driver configuration
         driver_config = config.get("driver", {})

@@ -13,17 +13,18 @@ from vanishcap.utils.logging import get_worker_logger
 class Worker(ABC):  # pylint: disable=too-many-instance-attributes
     """Base class for all workers in the system."""
 
-    def __init__(self, name: str, config: Dict[str, Any]) -> None:
+    def __init__(self, config: Dict[str, Any]) -> None:
         """Initialize the worker.
 
         Args:
-            name: Name of the worker
-            config: Configuration dictionary
+            config: Configuration dictionary containing:
+                - name: Name of the worker
+                - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
-        self.name = name
+        self.name = config["name"]
         self.config = config
-        self.logger = get_worker_logger(name, config.get("log_level"))
-        self.logger.warning("Initialized %s worker", name)
+        self.logger = get_worker_logger(self.name, config.get("log_level"))
+        self.logger.warning("Initialized %s worker", self.name)
 
         # Thread control
         self._run_thread: Optional[threading.Thread] = None

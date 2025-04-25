@@ -10,6 +10,7 @@ controller:
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
 video:
+  name: "video"
   source: "udp://@0.0.0.0:11111" # Tello video stream
   save_path: "/tmp/vanishcap_recording.mp4" # Path to save the video
   log_level: INFO # Show frame acquisition info
@@ -17,6 +18,7 @@ video:
   depends_on: ["detector", "drone"] # Wait for detector and drone to start
 
 detector:
+  name: "detector"
   model: yolov5nu # Base model path without extension
   backend: tensorrt # Use ONNX for cross-platform compatibility
   frame_skip: 1 # Process every frame
@@ -27,6 +29,7 @@ detector:
     - video: frame # Receive frame events from video
 
 navigator:
+  name: "navigator"
   target_class: "person" # Track people (class name)
   log_level: INFO
   profile_window: 1.5 # Show max task time over last 1.5 seconds
@@ -35,6 +38,7 @@ navigator:
     - detector: detection # Receive detection events from detector
 
 drone:
+  name: "drone"
   log_level: INFO
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start
@@ -61,6 +65,7 @@ drone:
   auto_takeoff: true # Whether to take off automatically without waiting for a target
 
 ui:
+  name: "ui"
   log_level: INFO # Show frame display info
   profile_window: 1.0 # Show max task time over last second
   depends_on: [] # No dependencies, can start anytime

@@ -28,11 +28,12 @@ class Ui(Worker):
 
         Args:
             config: Configuration dictionary containing:
+                - name: Name of the worker
                 - window_size: Optional tuple of (width, height) for the display window
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
                 - fps: Optional target frame rate (default: 30)
         """
-        super().__init__("ui", config)
+        super().__init__(config)
         # Display settings
         self.display_config = {
             "window_size": config.get("window_size", (800, 600)),

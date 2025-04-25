@@ -14,10 +14,11 @@ class Navigator(Worker):
 
         Args:
             config: Configuration dictionary containing:
+                - name: Name of the worker
                 - target_class: Class name to track
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
-        super().__init__("navigator", config)
+        super().__init__(config)
         self.target_class = config["target_class"]
         self.logger.warning("Initialized navigator worker with target class: %s", self.target_class)
 

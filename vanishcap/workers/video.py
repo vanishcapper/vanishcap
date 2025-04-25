@@ -20,11 +20,12 @@ class Video(Worker):
 
         Args:
             config: Configuration dictionary containing:
+                - name: Name of the worker
                 - source: Path to video file or camera index
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
                 - save_path: Optional path to save the video (if not provided, video won't be saved)
         """
-        super().__init__("video", config)
+        super().__init__(config)
         self.source = config["source"]
         self.logger.warning("Initialized video worker with source: %s", self.source)
 
