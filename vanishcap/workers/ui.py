@@ -92,10 +92,9 @@ class Ui(Worker):
                 or (py_event.type == pygame.KEYDOWN and py_event.key == pygame.K_ESCAPE)  # pylint: disable=no-member
             ):
                 continue
-            self.logger.warning("Received quit event from pygame")
+            self.logger.warning("Received quit event from pygame %s", py_event)
             self._emit(Event(self.name, "stop", None))
             self._stop_event.set()
-            # pygame.display.quit() # Quit handled in _finish
             return  # Exit task early if quitting
 
         # Get latest events from BaseWorker

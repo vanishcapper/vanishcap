@@ -337,12 +337,17 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         current_time = time.time()
 
         fb_velocity = 0
+        width_error = target_width - self.follow_target_width
         if abs(bbox[0]) < 0.95 and abs(bbox[2]) < 0.95:
-            width_error = target_width - self.follow_target_width
             fb_velocity = -width_error * self.driver.get_max_linear_velocity()
 
         frame_center_y = 0.5
-        ud_velocity = (target_y - frame_center_y) * self.driver.get_max_vertical_velocity()
+        # If target's top edge is above the threshold (bbox[3] > 0.95), move upward
+        if bbox[3] > 0.95 and width_error < 0:
+            ud_velocity = self.driver.get_max_vertical_velocity() / 2
+            fb_velocity = 0
+        else:
+            ud_velocity = (target_y - frame_center_y) * self.driver.get_max_vertical_velocity()
 
         fb_velocity *= target_pos["confidence"]
         ud_velocity *= target_pos["confidence"]
@@ -354,7 +359,8 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         if abs(target_width - self.follow_target_width) < self.movement_threshold:
             fb_rc = 0
-        if abs(target_y - frame_center_y) < self.movement_threshold:
+        # Only apply movement threshold for downward movement
+        if bbox[3] <= 0.95 and abs(target_y - frame_center_y) < self.movement_threshold:
             ud_rc = 0
 
         if (
