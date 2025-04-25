@@ -70,7 +70,16 @@ class Navigator(Worker):
             )
             self.logger.debug("Emitted target event with position (%.2f, %.2f)", target_x, target_y)
         else:
-            self.logger.debug("No targets of class %s found in frame", self.target_class)
+            self.logger.debug("No targets of class %s found in frame - emitting empty target event", self.target_class)
+            # Emit empty target event
+            self._emit(
+                Event(
+                    self.name,
+                    "target",
+                    None,
+                    frame_number=frame_number,
+                )
+            )
 
     def _finish(self) -> None:
         """Clean up navigator resources."""

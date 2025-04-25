@@ -86,8 +86,12 @@ class TestNavigator(unittest.TestCase):
         self.navigator._dispatch(detection_event)
         self.navigator._task()
 
-        # Verify no target event was emitted
-        self.mock_emit.assert_not_called()
+        # Verify target event was emitted with None data
+        self.mock_emit.assert_called_once()
+        emitted_event = self.mock_emit.call_args[0][0]
+        self.assertEqual(emitted_event.worker_name, "navigator")
+        self.assertEqual(emitted_event.event_name, "target")
+        self.assertIsNone(emitted_event.data)
 
     def test_empty_detection_queue(self):
         """Test handling of empty detection queue."""

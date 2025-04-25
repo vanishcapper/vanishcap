@@ -111,10 +111,13 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         self.is_flying = False
         self.ready_to_process_targets = False
         self.current_target: Optional[Dict[str, Any]] = None
+        self.last_target_x: Optional[float] = None
         self.yaw_start_time = 0.0
         self.yaw_duration = 0.0
         self.commanded_yaw = 0
         self.executing_yaw = False
+        self.searching_for_target = False
+        self.search_start_time = 0.0
 
     def update_movement(self):
         """Update the drone's movement state and send RC commands to the driver.
@@ -187,10 +190,21 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         Args:
             latest_target_event: The latest target event to process
         """
+        if latest_target_event.data is None:
+            self.logger.debug("Received empty target event - clearing current target")
+            if self.current_target is not None:
+                self.last_target_x = self.current_target["x"]
+                self.searching_for_target = True
+                self.search_start_time = time.time()
+            self.current_target = None
+            return
+
         self.current_target = latest_target_event.data
         self.current_target["processed"] = False
         self.current_target["frame_number"] = latest_target_event.frame_number
         self.current_target["timestamp"] = latest_target_event.timestamp
+        self.last_target_x = self.current_target["x"]
+        self.searching_for_target = False
         self.logger.debug(
             "Received new target position (frame %d): (%.2f, %.2f), bbox: (%f, %f, %f, %f)",
             latest_target_event.frame_number,
@@ -234,9 +248,22 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         else:
             if self.executing_yaw:
                 self.executing_yaw = False
-            self.logger.debug("No valid target - stopping movement")
-            self.current_command = CommandState()
-            self.update_movement()
+            if self.searching_for_target and self.last_target_x is not None:
+                current_time = time.time()
+                if current_time - self.search_start_time < 5.0:  # Search for 5 seconds
+                    self.logger.debug("Searching for target in last known direction")
+                    yaw_rc = 50 if self.last_target_x > 0 else -50  # Half speed yaw
+                    self.current_command = CommandState(yaw=yaw_rc)
+                    self.update_movement()
+                else:
+                    self.logger.debug("Search timeout - stopping yaw")
+                    self.searching_for_target = False
+                    self.current_command = CommandState()
+                    self.update_movement()
+            else:
+                self.logger.debug("No valid target - stopping movement")
+                self.current_command = CommandState()
+                self.update_movement()
 
     def _task(self) -> None:
         """Run one iteration of the drone control loop."""
