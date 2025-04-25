@@ -4,6 +4,8 @@ import time
 from queue import Empty
 from typing import Any, Dict, Optional
 
+import cv2
+
 from vidgear.gears import CamGear, WriteGear
 from vanishcap.event import Event
 from vanishcap.worker import Worker
@@ -107,6 +109,20 @@ class Video(Worker):
 
             # Save frame if writer is enabled
             if self.writer is not None:
+                # Add frame number to the frame
+                frame_with_text = frame.copy()
+                text = f"{self.frame_number}"
+                font = cv2.FONT_HERSHEY_SIMPLEX  # pylint: disable=no-member
+                font_scale = 0.5
+                font_thickness = 1
+                font_color = (127, 127, 255)
+                text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]  # pylint: disable=no-member
+                text_x = frame.shape[1] - text_size[0] - 10  # 10 pixels from right edge
+                text_y = frame.shape[0] - 10  # 10 pixels from bottom
+                # pylint: disable=no-member
+                cv2.putText(frame_with_text, text, (text_x, text_y), font, font_scale, font_color, font_thickness)
+                self.writer.write(frame_with_text)
+            else:
                 self.writer.write(frame)
 
             self._emit(Event(self.name, "frame", frame, frame_number=self.frame_number))

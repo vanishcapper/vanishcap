@@ -40,18 +40,37 @@ class WifiManager:
 
         # Connect to WiFi if configured
         if "connect" in config:
-            # Try connecting first
+            max_retries = 10
+            retry_delay = 2.0  # seconds
+
+            # Try initial connect first
             if self.connect(config["connect"]["ssid"], config["connect"].get("password", "")):
                 return
 
-            # If initial connect failed, scan and try again
-            self.logger.warning("Initial connect failed, scanning and retrying...")
-            if not self.scan():
-                self.logger.error("Failed to scan for WiFi networks")
-                raise WifiError("Failed to scan for WiFi networks")
-            if not self.connect(config["connect"]["ssid"], config["connect"].get("password", "")):
-                self.logger.error("Failed to connect to WiFi network: %s", config["connect"]["ssid"])
-                raise WifiError(f"Failed to connect to WiFi network: {config['connect']['ssid']}")
+            # If initial connect failed, scan and retry the sequence
+            for attempt in range(max_retries):
+                try:
+                    self.logger.warning(
+                        "Initial connect failed, scanning and retrying... (attempt %d/%d)", attempt + 1, max_retries
+                    )
+                    if not self.scan():
+                        self.logger.warning("Failed to scan for WiFi networks")
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                        continue
+
+                    if self.connect(config["connect"]["ssid"], config["connect"].get("password", "")):
+                        return
+
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                except Exception as e:  # pylint: disable=broad-except
+                    self.logger.warning("Connection attempt %d/%d failed: %s", attempt + 1, max_retries, e)
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+
+            self.logger.error("Failed to connect to WiFi after %d attempts", max_retries)
+            raise WifiError(f"Failed to connect to WiFi network: {config['connect']['ssid']}")
         else:
             self.logger.warning("Running in offline mode - skipping WiFi management")
 
