@@ -18,8 +18,9 @@ video:
 
 detector:
   name: "detector"
-  model: yolov5nu # Base model path without extension
-  backend: tensorrt # Use ONNX for cross-platform compatibility
+  model: yolov8m
+  model_verbose: true
+  backend: tensorrt
   frame_skip: 1 # Process every frame
   log_level: INFO # Show frame processing info
   profile_window: 2.0 # Show max task time over last 2 seconds
@@ -29,6 +30,7 @@ detector:
 
 navigator:
   name: "navigator"
+  disabled: false
   target_class: "person" # Track people (class name)
   log_level: INFO
   profile_window: 1.5 # Show max task time over last 1.5 seconds
@@ -38,6 +40,7 @@ navigator:
 
 drone:
   name: "drone"
+  disabled: false
   log_level: INFO
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start
@@ -63,6 +66,7 @@ drone:
 
 ui:
   name: "ui"
+  disabled: false
   log_level: INFO # Show frame display info
   profile_window: 1.0 # Show max task time over last second
   depends_on: [] # No dependencies, can start anytime

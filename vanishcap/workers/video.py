@@ -123,8 +123,6 @@ class Video(Worker):
                 # pylint: disable=no-member
                 cv2.putText(frame_with_text, text, (text_x, text_y), font, font_scale, font_color, font_thickness)
                 self.writer.write(frame_with_text)
-            else:
-                self.writer.write(frame)
 
             self._emit(Event(self.name, "frame", frame, frame_number=self.frame_number))
         except Empty:

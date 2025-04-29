@@ -20,6 +20,7 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
             config: Configuration dictionary containing:
                 - name: Name of the worker
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                - disabled: Optional boolean to disable the worker (default: False)
         """
         self.name = config["name"]
         self.config = config
@@ -64,6 +65,10 @@ class Worker(ABC):  # pylint: disable=too-many-instance-attributes
             controller: Reference to the Controller for event routing
             run_in_main_thread: If True, run the worker in the main thread
         """
+        if self.config.get("disabled", False):
+            self.logger.warning("Worker %s is disabled, not starting", self.name)
+            return
+
         self.logger.warning("Starting %s worker", self.name)
         self._stop_event.clear()
         self._controller = controller

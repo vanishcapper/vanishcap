@@ -5,13 +5,14 @@ import time
 from typing import Any, Dict
 
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 from vanishcap.event import Event
 from vanishcap.worker import Worker
 
 
-class Detector(Worker):
+class Detector(Worker):  # pylint: disable=too-many-instance-attributes
     """Worker that processes frames and emits detection events."""
 
     def __init__(self, config: Dict[str, Any]) -> None:
@@ -23,12 +24,14 @@ class Detector(Worker):
                 - model: Base path to YOLO model (without extension)
                 - frame_skip: Number of frames to skip between detections
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                - model_verbose: Optional verbose level for model (False, True) (default: False)
                 - backend: Optional backend to use (pytorch, tensorrt, onnx) (default: pytorch)
         """
         super().__init__(config)
         self.model_base = config["model"]
         self.frame_skip = config.get("frame_skip", 1)  # Default to 1 frame
         self.backend = config.get("backend", "pytorch")
+        self.model_verbose = config.get("model_verbose", False)
         self.logger.warning("Initialized detector worker with model base: %s", self.model_base)
 
         # Create assets directory if it doesn't exist
@@ -45,7 +48,14 @@ class Detector(Worker):
                 pytorch_path = os.path.join(self.assets_dir, f"{self.model_base}.pt")
                 model = YOLO(pytorch_path, task="detect")
                 # Save engine to assets directory
-                model.export(format="engine", device=0, half=True, workspace=4, verbose=False, save_dir=self.assets_dir)
+                model.export(
+                    format="engine",
+                    device=0,
+                    half=True,
+                    workspace=4,
+                    verbose=self.model_verbose,
+                    save_dir=self.assets_dir,
+                )
                 self.logger.warning("Saved TensorRT engine to: %s", model_path)
         elif self.backend == "onnx":
             model_path = os.path.join(self.assets_dir, f"{self.model_base}.onnx")
@@ -55,7 +65,7 @@ class Detector(Worker):
                 pytorch_path = os.path.join(self.assets_dir, f"{self.model_base}.pt")
                 model = YOLO(pytorch_path, task="detect")
                 # Save ONNX to assets directory
-                model.export(format="onnx", verbose=False, save_dir=self.assets_dir)
+                model.export(format="onnx", verbose=self.model_verbose, save_dir=self.assets_dir)
                 self.logger.warning("Saved ONNX model to: %s", model_path)
         elif self.backend == "pytorch":
             # Use regular PyTorch model
@@ -69,10 +79,17 @@ class Detector(Worker):
         self.model = YOLO(model_path, task="detect")
         self.logger.warning("Successfully loaded %s model", self.backend)
 
+        if torch.cuda.is_available():
+            self.logger.warning("CUDA is available on device %s", torch.cuda.get_device_name())
+            self.device = torch.device("cuda")
+        else:
+            self.logger.warning("CUDA is not available, using CPU")
+            self.device = torch.device("cpu")
+
         # Warm up model with blank image
         self.logger.warning("Warming up model with blank image...")
         blank_image = np.zeros((640, 640, 3), dtype=np.uint8)  # Standard YOLO input size
-        _ = self.model(blank_image, verbose=False)
+        _ = self.model(blank_image, verbose=self.model_verbose, device=self.device)
         self.logger.warning("Model warmup complete")
 
         # Initialize state
@@ -129,9 +146,8 @@ class Detector(Worker):
         # Log which frame we're processing
         self.logger.info("Processing frame %d", frame_number)
 
-        # Run detection with verbose=False to suppress YOLO's default logging
         start_time = time.perf_counter()
-        results = self.model(frame, verbose=False)
+        results = self.model(frame, verbose=self.model_verbose, device=self.device)
         processing_time = time.perf_counter() - start_time
         self.logger.info(
             "Frame %d detection took %d ms (%d ms after frame acquisition)",
