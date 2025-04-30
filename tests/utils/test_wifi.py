@@ -12,7 +12,7 @@ class TestWifiManager(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.config = {
-            "connect": {"ssid": "test_network", "password": "test_password"},
+            "connect": {"ssid": "test_network", "password": "test_password", "max_retries": 1, "retry_delay": 1.0},
             "reconnect": True,
             "log_level": "DEBUG",
         }

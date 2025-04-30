@@ -26,6 +26,8 @@ class WifiManager:
                 - connect: Optional dictionary with:
                     - ssid: SSID to connect to
                     - password: Password for the SSID
+                    - max_retries: Optional number of connection retry attempts (default: 10)
+                    - retry_delay: Optional delay between retries in seconds (default: 2.0)
                 - reconnect: Whether to reconnect to previous SSID after workers finish
                 - log_level: Optional log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         """
@@ -40,8 +42,8 @@ class WifiManager:
 
         # Connect to WiFi if configured
         if "connect" in config:
-            max_retries = 10
-            retry_delay = 2.0  # seconds
+            max_retries = config["connect"].get("max_retries", 10)
+            retry_delay = config["connect"].get("retry_delay", 2.0)  # seconds
 
             # Try initial connect first
             if self.connect(config["connect"]["ssid"], config["connect"].get("password", "")):

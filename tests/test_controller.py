@@ -43,6 +43,7 @@ class TestController(unittest.TestCase):
         # Create a configuration dictionary
         self.config = {
             "controller": {"offline": True, "log_level": "DEBUG"},
+            "ui": {"disabled": True},
             "test_worker": {"name": "test_worker", "log_level": "DEBUG"},
             "other_worker": {"name": "other_worker", "log_level": "DEBUG"},
         }

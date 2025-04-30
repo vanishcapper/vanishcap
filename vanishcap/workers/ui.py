@@ -1,23 +1,15 @@
 """Worker for displaying video frames and detection results."""
 
-# pylint: disable=wrong-import-position
+# pylint: disable=wrong-import-position,too-many-instance-attributes,no-member
 
-import os
 import time
 import traceback
 from typing import Any, Dict, Optional
 
-# Suppress pygame startup message
-os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+import cv2
 
-import cv2  # noqa: C0413
-import pygame  # noqa: C0413
-import pygame.display  # noqa: C0413
-import pygame.event  # noqa: C0413
-import pygame.image  # noqa: C0413
-
-from vanishcap.event import Event  # noqa: C0413
-from vanishcap.worker import Worker  # noqa: C0413
+from vanishcap.event import Event
+from vanishcap.worker import Worker
 
 
 class Ui(Worker):
@@ -47,25 +39,26 @@ class Ui(Worker):
             self.display_config["target_fps"],
         )
 
-        # Initialize pygame modules
+        # Initialize OpenCV window
         try:
-            pygame.display.init()
-            pygame.font.init()
-            self.screen = pygame.display.set_mode(self.display_config["window_size"])
-            pygame.display.set_caption("vanishcap")
-            self.logger.warning("Pygame modules initialized")
+            cv2.resizeWindow("vanishcap", *self.display_config["window_size"])
+            self.logger.warning("OpenCV window initialized")
         except Exception as e:
-            self.logger.error("Failed to initialize pygame modules: %s", e)
+            self.logger.error("Failed to initialize OpenCV window: %s", e)
             traceback.print_exc()
             raise
 
-        # Initialize state - Reinstate state variables
+        # Initialize state
         self.current_frame_event: Optional[Event] = None
         self.current_detections = []
         self.worker_profiles = {}  # Maps worker name to last task time
 
-        # Profiling data
-        self.profile_font = pygame.font.Font(None, 20)  # Small font for profiling text
+        # Font settings for OpenCV
+        self.font = cv2.FONT_HERSHEY_SIMPLEX
+        self.font_scale = 0.5
+        self.font_thickness = 1
+        self.font_color = (255, 255, 255)  # White
+        self.box_color = (0, 255, 0)  # Green
 
     def _denormalize_coordinates(self, x: float, y: float, width: float, height: float) -> tuple[int, int]:
         """Convert normalized coordinates [-1, 1] back to pixel coordinates.
@@ -86,14 +79,9 @@ class Ui(Worker):
 
     def _task(self) -> None:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         """Run one iteration of the UI loop."""
-        # Handle pygame events first
-        for py_event in pygame.event.get():
-            if not (
-                py_event.type == pygame.QUIT  # pylint: disable=no-member
-                or (py_event.type == pygame.KEYDOWN and py_event.key == pygame.K_ESCAPE)  # pylint: disable=no-member
-            ):
-                continue
-            self.logger.warning("Received quit event from pygame %s", py_event)
+        # Check for quit key (ESC)
+        if (cv2.waitKey(1) & 0xFF == 27) or cv2.getWindowProperty("vanishcap", cv2.WND_PROP_VISIBLE) < 1:
+            self.logger.warning("Received quit event from OpenCV")
             self._emit(Event(self.name, "stop", None))
             self._stop_event.set()
             return  # Exit task early if quitting
@@ -120,7 +108,7 @@ class Ui(Worker):
             return
 
         # Extract frame data from the instance variable
-        frame = self.current_frame_event.data
+        frame = self.current_frame_event.data.copy()  # Make a copy to draw on
         frame_number = self.current_frame_event.frame_number
 
         # Log which frame we're displaying
@@ -131,18 +119,11 @@ class Ui(Worker):
             1000 * (current_time - self.current_frame_event.timestamp),
         )
 
-        # Convert frame to pygame surface
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # pylint: disable=no-member
-        frame_surface = pygame.image.frombuffer(frame_rgb.tobytes(), frame_rgb.shape[1::-1], "RGB")
-
         # Get original frame dimensions
         orig_height, orig_width = frame.shape[:2]
 
         # Scale frame to window size
-        frame_surface = pygame.transform.scale(frame_surface, self.display_config["window_size"])
-
-        # Draw frame
-        self.screen.blit(frame_surface, (0, 0))
+        frame = cv2.resize(frame, self.display_config["window_size"])
 
         # Draw detection boxes using self.current_detections
         for detection in self.current_detections:
@@ -159,17 +140,17 @@ class Ui(Worker):
             x2 = int(x2 * self.display_config["window_size"][0] / orig_width)
             y2 = int(y2 * self.display_config["window_size"][1] / orig_height)
 
-            # Flip vertical coordinates
+            # Invert y-coordinates for OpenCV's coordinate system
             window_height = self.display_config["window_size"][1]
-            y1, y2 = window_height - y2, window_height - y1
+            y1 = window_height - y1
+            y2 = window_height - y2
 
-            # Draw rectangle
-            pygame.draw.rect(self.screen, (0, 255, 0), (x1, y1, x2 - x1, y2 - y1), 2)
+            # Draw rectangle (OpenCV uses BGR color order)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), self.box_color, 2)
 
-            # Draw label
+            # Draw label (adjust y position for inverted coordinates)
             label = f"{detection['class_name']} ({detection['confidence']:.2f})"
-            text = self.profile_font.render(label, True, (0, 255, 0))
-            self.screen.blit(text, (x1, y1 - 20))
+            cv2.putText(frame, label, (x1, y1 + 20), self.font, self.font_scale, self.font_color, self.font_thickness)
 
             # Log detection drawing
             self.logger.debug(
@@ -191,24 +172,26 @@ class Ui(Worker):
             self.logger.info("Boxes drawn: %s", summary)
 
         # Draw frame number in top right
-        frame_text = self.profile_font.render(f"Frame: {frame_number}", True, (255, 255, 255))
-        text_rect = frame_text.get_rect()
-        text_rect.topright = (self.display_config["window_size"][0] - 10, 10)
-        self.screen.blit(frame_text, text_rect)
+        frame_text = f"Frame: {frame_number}"
+        text_size = cv2.getTextSize(frame_text, self.font, self.font_scale, self.font_thickness)[0]
+        text_x = self.display_config["window_size"][0] - text_size[0] - 10
+        text_y = text_size[1] + 10
+        cv2.putText(
+            frame, frame_text, (text_x, text_y), self.font, self.font_scale, self.font_color, self.font_thickness
+        )
 
         # Draw profiling data using self.worker_profiles
-        y = 10
+        y = 30  # Start below frame number
         for worker_name, task_time in self.worker_profiles.items():
-            text = self.profile_font.render(f"{worker_name}: {task_time*1000:.1f}ms", True, (255, 255, 255))
-            self.screen.blit(text, (10, y))
+            text = f"{worker_name}: {task_time*1000:.1f}ms"
+            cv2.putText(frame, text, (10, y), self.font, self.font_scale, self.font_color, self.font_thickness)
             y += 20
 
         # Update display
-        pygame.display.flip()
+        cv2.imshow("vanishcap", frame)
         self.display_config["last_frame_time"] = time.time()
 
     def _finish(self) -> None:
-        """Clean up pygame resources."""
-        pygame.font.quit()
-        pygame.display.quit()
-        self.logger.warning("Pygame modules stopped")
+        """Clean up OpenCV resources."""
+        cv2.destroyAllWindows()
+        self.logger.warning("OpenCV window closed")

@@ -5,10 +5,8 @@
 # pylint: disable=too-many-instance-attributes
 
 import unittest
-from unittest.mock import MagicMock, patch
-import time  # pylint: disable=unused-import
+from unittest.mock import patch
 import numpy as np
-import pygame  # pylint: disable=unused-import
 
 from vanishcap.workers.ui import Ui
 from vanishcap.event import Event
@@ -22,67 +20,30 @@ class TestUI(unittest.TestCase):
         self.config = {"name": "ui", "window_size": (800, 600), "fps": 30, "log_level": "DEBUG"}
         self.mock_frame = np.zeros((600, 800, 3), dtype=np.uint8)
 
-        # Create mock surface
-        self.mock_surface = MagicMock()
-        self.mock_surface.get_rect.return_value = MagicMock(topright=(790, 10))
-
-        # Create mock font
-        self.mock_font = MagicMock()
-        self.mock_font.render.return_value = self.mock_surface
-
-        # Create patches
-        self.patcher_display = patch("pygame.display")
-        self.patcher_font = patch("pygame.font")
-        self.patcher_image = patch("pygame.image")
-        self.patcher_draw = patch("pygame.draw")
-        self.patcher_transform = patch("pygame.transform")
-        self.patcher_event = patch("pygame.event")
+        # Create patches for OpenCV functions
+        self.patcher_cv2 = patch("vanishcap.workers.ui.cv2")
 
         # Start patches
-        self.mock_display = self.patcher_display.start()
-        self.mock_font = self.patcher_font.start()
-        self.mock_image = self.patcher_image.start()
-        self.mock_draw = self.patcher_draw.start()
-        self.mock_transform = self.patcher_transform.start()
-        self.mock_event = self.patcher_event.start()
+        self.mock_cv2 = self.patcher_cv2.start()
 
-        # Configure mock display
-        self.mock_screen = MagicMock()
-        self.mock_display.set_mode.return_value = self.mock_screen
-        self.mock_display.init.return_value = None
-        self.mock_display.quit.return_value = None
-        self.mock_display.flip.return_value = None
-        self.mock_display.get_init.return_value = True
-
-        # Configure mock font
-        self.mock_font.init.return_value = None
-        self.mock_font.Font.return_value = self.mock_font
-        self.mock_font.quit.return_value = None
-
-        # Configure mock image
-        self.mock_image.frombuffer.return_value = self.mock_surface
-
-        # Configure mock transform
-        self.mock_transform.scale.return_value = self.mock_surface
-
-        # Configure mock event
-        self.mock_event.get.return_value = []
+        # Configure mock cv2
+        self.mock_cv2.FONT_HERSHEY_SIMPLEX = 0
+        self.mock_cv2.WINDOW_NORMAL = 0
+        self.mock_cv2.WND_PROP_VISIBLE = 0
+        self.mock_cv2.waitKey.return_value = 0
+        self.mock_cv2.getWindowProperty.return_value = 1
+        self.mock_cv2.getTextSize.return_value = ((100, 20), 0)
 
         # Create UI worker instance
         self.ui = Ui(self.config)
 
     def tearDown(self):
         """Clean up after each test."""
-        self.patcher_display.stop()
-        self.patcher_font.stop()
-        self.patcher_image.stop()
-        self.patcher_draw.stop()
-        self.patcher_transform.stop()
-        self.patcher_event.stop()
+        self.patcher_cv2.stop()
 
     def test_initialization(self):
         """Test initialization of UI worker (attributes)."""
-        self.assertIsNotNone(self.ui.profile_font)
+        self.assertEqual(self.ui.font, self.mock_cv2.FONT_HERSHEY_SIMPLEX)
         self.assertIsNone(self.ui.current_frame_event)
         self.assertEqual(self.ui.current_detections, [])
         self.assertEqual(self.ui.worker_profiles, {})
@@ -119,8 +80,7 @@ class TestUI(unittest.TestCase):
     def test_finish(self):
         """Test cleanup in finish method."""
         self.ui._finish()
-        self.mock_font.quit.assert_called_once()
-        self.mock_display.quit.assert_called_once()
+        self.mock_cv2.destroyAllWindows.assert_called_once()
 
 
 if __name__ == "__main__":

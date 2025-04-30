@@ -5,6 +5,7 @@ import inspect
 from pathlib import Path
 from typing import Any, Dict, Set
 
+import cv2
 from omegaconf import OmegaConf
 from vanishcap.event import Event
 from vanishcap.worker import Worker
@@ -53,6 +54,10 @@ class Controller:
                 raise InitializationError(f"WiFi initialization failed: {e}") from e
         else:
             self.logger.warning("Running in offline mode - skipping WiFi management")
+
+        # Initialize OpenCV window, required because the window can't be created in a worker
+        if not self.config.get("ui", {}).get("disabled", False):
+            cv2.namedWindow("vanishcap", flags=cv2.WINDOW_GUI_NORMAL)  # pylint: disable=no-member
 
         self.workers: Dict[str, Worker] = {}
         self.event_routes: Dict[str, Set[str]] = {}
