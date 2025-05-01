@@ -7,6 +7,7 @@ controller:
     connect:
       ssid: "t3" # Optional: SSID to connect to before starting workers
       password: "" # Optional: Password for the SSID
+      interface: "wlan-t3" # Optional: WiFi interface to use
     reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
 
 video:
@@ -39,7 +40,7 @@ navigator:
 
 drone:
   name: "drone"
-  log_level: INFO
+  log_level: DEBUG
   profile_window: 1.0 # Show max task time over last second
   depends_on: ["navigator"] # Wait for navigator to start
   events:
@@ -60,8 +61,8 @@ drone:
   follow_target_width: 0.5 # Width of target to maintain in proportion of frame width
   follow_target_height: 0.75 # Where on the target's height to center (default: 0.85)
   movement_threshold: 0.1 # In normalized coordinates [-1, 1]
-  delay_between_timed_yaws: 0.0 # Delay between timed yaws in seconds
-  percent_angle_to_command: 50 # Percentage of target angle to rotate in each yaw command [0, 100]
+  delay_between_timed_yaws: 0.1 # Delay between timed yaws in seconds
+  percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
   auto_takeoff: true # Whether to take off automatically without waiting for a target
 
 ui:

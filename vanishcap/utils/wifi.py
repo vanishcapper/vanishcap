@@ -1,12 +1,10 @@
 """Utility module for WiFi management."""
 
 import subprocess
-import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from vanishcap.utils.logging import get_worker_logger
-from vanishcap.event import Event
 
 
 class WifiError(Exception):
@@ -26,6 +24,7 @@ class WifiManager:
                 - connect: Optional dictionary with:
                     - ssid: SSID to connect to
                     - password: Password for the SSID
+                    - interface: Optional WiFi interface to use (e.g. 'wlan0')
                     - max_retries: Optional number of connection retry attempts (default: 10)
                     - retry_delay: Optional delay between retries in seconds (default: 2.0)
                 - reconnect: Whether to reconnect to previous SSID after workers finish
@@ -39,6 +38,11 @@ class WifiManager:
         # Store configuration
         self.config = config
         self.previous_ssid: Optional[str] = None
+
+        # Set WiFi interface if specified in config
+        if "connect" in config and "interface" in config["connect"]:
+            self.wifi_device = config["connect"]["interface"]
+            self.logger.info("Using configured WiFi interface: %s", self.wifi_device)
 
         # Connect to WiFi if configured
         if "connect" in config:
@@ -145,6 +149,9 @@ class WifiManager:
             # Parse terse output (DEVICE:TYPE:STATE:CONNECTION)
             for line in result.stdout.splitlines():
                 device, dev_type, state, connection = line.split(":")
+                if self.wifi_device and device != self.wifi_device:
+                    continue
+
                 if dev_type.lower() == "wifi" and state.lower() == "connected":
                     if connection and connection != "off/any":
                         return (connection, device)
@@ -196,6 +203,9 @@ class WifiManager:
                 cmd = ["nmcli", "device", "wifi", "connect", ssid, "password", password]
             else:
                 cmd = ["nmcli", "device", "wifi", "connect", ssid]
+
+            if self.wifi_device:
+                cmd += ["ifname", self.wifi_device]
 
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
             if result.returncode == 0:

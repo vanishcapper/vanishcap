@@ -5,7 +5,6 @@ description = "A real-time object detection and tracking system"
 requires-python = ">=3.8"
 dependencies = [
     "click>=8.1.0",
-    "djitellopy>=2.5.0",
     "omegaconf>=2.3.0",
     "opencv-python>=4.8.0",
     "numpy>=1.24.0",

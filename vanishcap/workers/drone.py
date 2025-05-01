@@ -58,6 +58,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
                 - driver: Driver configuration dictionary containing:
                     - name: Name of the driver to use (default: "tello")
                     - ip: IP address of the drone (for Tello)
+                    - interface: Optional WiFi interface to use for communication
                     - max_linear_velocity: Maximum linear velocity in cm/s (default: 50)
                     - max_angular_velocity: Maximum angular velocity in deg/s (default: 50)
                     - max_vertical_velocity: Maximum vertical velocity in cm/s (default: 30)
@@ -84,10 +85,19 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         driver_config = config.get("driver", {})
         driver_name = driver_config.get("name", "tello")
 
+        # Get WiFi interface from controller's WiFi manager if available
+        # pylint: disable=no-member
+        if hasattr(self, "controller") and hasattr(self.controller, "wifi_manager"):
+            wifi_interface = self.controller.wifi_manager.wifi_device
+            if wifi_interface:
+                driver_config["interface"] = wifi_interface
+                self.logger.info("Using WiFi interface %s for drone communication", wifi_interface)
+        # pylint: enable=no-member
+
         # Dynamically import and initialize driver
         try:
             driver_module = importlib.import_module(f"vanishcap.drivers.{driver_name}")
-            driver_class = getattr(driver_module, f"{driver_name.title()}Driver")
+            driver_class = getattr(driver_module, f"{driver_name.replace('_', ' ').title().replace(' ', '')}Driver")
             self.driver: BaseDroneDriver = driver_class(driver_config)
         except (ImportError, AttributeError) as e:
             raise ValueError(f"Failed to load driver '{driver_name}': {e}") from e
@@ -135,6 +145,7 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
             self.logger.debug("Movement command is the same as the last command - skipping")
             return
         self.last_command = self.current_command
+        self.logger.debug("Sending movement command: %s", self.current_command)
         self.driver.send_rc_control(
             self.current_command.lr, self.current_command.fb, self.current_command.ud, self.current_command.yaw
         )
@@ -271,7 +282,6 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
         state = self.driver.get_current_state()
         self.logger.debug("Current drone state: %s", state)
 
-        current_time = time.time()
         latest_target_event = self._get_latest_events_and_clear().get("target", None)
 
         if latest_target_event is not None:
@@ -281,11 +291,16 @@ class Drone(Worker):  # pylint: disable=too-many-instance-attributes
 
         self._process_current_target()
 
-        if self.executing_yaw and current_time >= self.yaw_start_time + self.yaw_duration:
+        current_time = time.time()
+        yaw_stop_time = self.yaw_start_time + self.yaw_duration
+        if self.executing_yaw and current_time > yaw_stop_time:
+            self.logger.debug(
+                "Completed yaw rotation - stopping yaw. Rotated for %.2f seconds",
+                current_time - self.yaw_start_time,
+            )
             self.executing_yaw = False
             self.last_command = deepcopy(self.current_command)
             self.current_command.yaw = 0
-            self.logger.debug("Completed yaw rotation - stopping yaw")
 
         self.update_movement()
 

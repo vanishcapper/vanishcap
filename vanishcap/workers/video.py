@@ -43,8 +43,6 @@ class Video(Worker):
         options = {
             "THREADED_QUEUE_MODE": not self.is_stream,  # Only enable threaded queue mode for files
             "THREAD_TIMEOUT": 5.0,  # Increase thread timeout to 5 seconds
-            "QUEUE_TIMEOUT": 5.0,  # Add queue timeout
-            "BUFFER_QUEUE_SIZE": 100,  # Increase buffer size
         }
         self.cap = CamGear(source=self.source, **options).start()
         if self.cap is None:
