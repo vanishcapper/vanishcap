@@ -1,0 +1,150 @@
+controller:
+  log_level: INFO # Log level for the controller itself
+  log_file: "/tmp/vanishcap.log" # Optional: Path to log file
+  offline: false # Whether to run in offline mode (no WiFi management)
+
+tello1:
+  type: controller
+  wifi:
+    connect:
+      ssid: "t1" # Optional: SSID to connect to before starting workers
+      password: "" # Optional: Password for the SSID
+      interface: "wlan-t1" # Optional: WiFi interface to use
+    reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
+  workers:
+    - video:
+        name: "video1"
+        source: "udp://@0.0.0.0:11111" # Tello video stream
+        save_path: "/tmp/vanishcap_recording_1.mp4" # Path to save the video
+        log_level: INFO # Show frame acquisition info
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["detector1", "drone1"] # Wait for detector and drone to start
+
+    - detector:
+        name: "detector1"
+        model: yolov5nu # Base model path without extension
+        backend: tensorrt # Use ONNX for cross-platform compatibility
+        frame_skip: 1 # Process every frame
+        log_level: INFO # Show frame processing info
+        profile_window: 2.0 # Show max task time over last 2 seconds
+        depends_on: [] # No dependencies
+        events:
+          - video1: frame # Receive frame events from video
+
+    - navigator:
+        name: "navigator1"
+        target_class: "person" # Track people (class name)
+        log_level: INFO
+        profile_window: 1.5 # Show max task time over last 1.5 seconds
+        depends_on: ["detector1"] # Wait for detector to start
+        events:
+          - detector1: detection # Receive detection events from detector
+
+    - drone:
+        name: "drone1"
+        log_level: INFO
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["navigator1"] # Wait for navigator to start
+        events:
+          - navigator1: target # Receive target events from navigator
+        driver:
+          log_level: DEBUG
+          name: "tello" # Name of the driver to use
+          ip: "192.168.10.1" # Default Tello IP address
+          max_linear_velocity: 80 # Maximum linear velocity in cm/s
+          max_angular_velocity: 90 # Maximum angular velocity in deg/s
+          max_vertical_velocity: 50 # Maximum vertical velocity in cm/s
+          max_yaw_to_command: 50
+          field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
+          disable_yaw: false # Whether to disable yaw rotation
+          disable_xy: false # Whether to disable forward/backward and left/right movement
+          disable_z: false # Whether to disable up/down movement
+        follow_distance: 100 # Distance to maintain from target in cm
+        follow_target_width: 0.3 # Width of target to maintain in proportion of frame width
+        follow_target_height: 0.9 # Where on the target's height to center (default: 0.85)
+        movement_threshold: 0.1 # In normalized coordinates [-1, 1]
+        delay_between_timed_yaws: 0.1 # Delay between timed yaws in seconds
+        percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
+        auto_takeoff: true # Whether to take off automatically without waiting for a target
+
+tello3:
+  type: controller
+  wifi:
+    connect:
+      ssid: "t3" # Optional: SSID to connect to before starting workers
+      password: "" # Optional: Password for the SSID
+      interface: "wlan-t3" # Optional: WiFi interface to use
+    reconnect: true # Optional: Whether to reconnect to previous SSID after workers finish
+  workers:
+    - video:
+        name: "video3"
+        source: "udp://@0.0.0.0:11113" # Tello video stream
+        save_path: "/tmp/vanishcap_recording_3.mp4" # Path to save the video
+        log_level: INFO # Show frame acquisition info
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["detector3", "drone3"] # Wait for detector and drone to start
+
+    - detector:
+        name: "detector3"
+        model: yolov5nu # Base model path without extension
+        backend: tensorrt # Use ONNX for cross-platform compatibility
+        frame_skip: 1 # Process every frame
+        log_level: INFO # Show frame processing info
+        profile_window: 2.0 # Show max task time over last 2 seconds
+        depends_on: [] # No dependencies
+        events:
+          - video3: frame # Receive frame events from video
+
+    - navigator:
+        name: "navigator3"
+        target_class: "person" # Track people (class name)
+        log_level: INFO
+        profile_window: 1.5 # Show max task time over last 1.5 seconds
+        depends_on: ["detector3"] # Wait for detector to start
+        events:
+          - detector3: detection # Receive detection events from detector
+
+    - drone:
+        name: "drone3"
+        log_level: INFO
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["navigator3"] # Wait for navigator to start
+        events:
+          - navigator3: target # Receive target events from navigator
+        driver:
+          log_level: DEBUG
+          name: "tello" # Name of the driver to use
+          ip: "192.168.10.1" # Default Tello IP address
+          max_linear_velocity: 80 # Maximum linear velocity in cm/s
+          max_angular_velocity: 90 # Maximum angular velocity in deg/s
+          max_vertical_velocity: 50 # Maximum vertical velocity in cm/s
+          max_yaw_to_command: 50
+          field_of_view: 86.2 # Width of camera field of view in degrees for time-based yaw control
+          disable_yaw: false # Whether to disable yaw rotation
+          disable_xy: false # Whether to disable forward/backward and left/right movement
+          disable_z: false # Whether to disable up/down movement
+        follow_distance: 100 # Distance to maintain from target in cm
+        follow_target_width: 0.5 # Width of target to maintain in proportion of frame width
+        follow_target_height: 0.75 # Where on the target's height to center (default: 0.85)
+        movement_threshold: 0.1 # In normalized coordinates [-1, 1]
+        delay_between_timed_yaws: 0.1 # Delay between timed yaws in seconds
+        percent_angle_to_command: 100 # Percentage of target angle to rotate in each yaw command [0, 100]
+        auto_takeoff: true # Whether to take off automatically without waiting for a target
+
+ui:
+  name: "ui"
+  log_level: INFO # Show frame display info
+  profile_window: 1.0 # Show max task time over last second
+  depends_on: [] # No dependencies, can start anytime
+  events:
+    - video1: frame # Receive frame events from video
+    - detector1: detection # Receive detection events from detector
+    - video1: worker_profile # Receive profiling data from video worker
+    - detector1: worker_profile # Receive profiling data from detector worker
+    - navigator1: worker_profile # Receive profiling data from navigator worker
+    - video3: frame # Receive frame events from video
+    - detector3: detection # Receive detection events from detector
+    - video3: worker_profile # Receive profiling data from video worker
+    - detector3: worker_profile # Receive profiling data from detector worker
+    - navigator3: worker_profile # Receive profiling data from navigator worker
+    - ui: worker_profile # Receive profiling data from UI worker

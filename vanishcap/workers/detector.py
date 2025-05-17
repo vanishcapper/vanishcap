@@ -144,7 +144,7 @@ class Detector(Worker):  # pylint: disable=too-many-instance-attributes
         frame_number = frame_event.frame_number
 
         # Log which frame we're processing
-        self.logger.info("Processing frame %d", frame_number)
+        self.logger.info("Processing frame %d from %s", frame_number, frame_event.worker_name)
 
         start_time = time.perf_counter()
         results = self.model(frame, verbose=self.model_verbose, device=self.device)

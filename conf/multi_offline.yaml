@@ -1,0 +1,134 @@
+controller:
+  log_level: INFO # Log level for the controller itself
+  log_file: "/tmp/vanishcap.log" # Optional: Path to log file
+  offline: true # Run in offline mode (no WiFi management)
+
+tello1:
+  type: controllerx
+  workers:
+    - video:
+        name: "video1"
+        source: "/tmp/vanishcap_recording_1.mp4" # Video file for offline playback
+        log_level: INFO # Show frame acquisition info
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["detector1", "drone1"] # Wait for detector and drone to start
+
+    - detector:
+        name: "detector1"
+        model: yolov8m # Base model path without extension
+        model_verbose: true
+        backend: tensorrt # Use TensorRT for performance
+        frame_skip: 1 # Process every frame
+        log_level: INFO # Show frame processing info
+        profile_window: 2.0 # Show max task time over last 2 seconds
+        depends_on: [] # No dependencies
+        events:
+          - video1: frame # Receive frame events from video
+
+    - navigator:
+        name: "navigator1"
+        target_class: "person" # Track people (class name)
+        log_level: INFO
+        profile_window: 1.5 # Show max task time over last 1.5 seconds
+        depends_on: ["detector1"] # Wait for detector to start
+        events:
+          - detector1: detection # Receive detection events from detector
+
+    - drone:
+        name: "drone1"
+        log_level: INFO
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["navigator1"] # Wait for navigator to start
+        events:
+          - navigator1: target # Receive target events from navigator
+        driver:
+          log_level: INFO
+          name: "offline" # Use offline driver
+          max_linear_velocity: 50 # Maximum linear velocity in cm/s
+          max_angular_velocity: 50 # Maximum angular velocity in deg/s
+          max_vertical_velocity: 30 # Maximum vertical velocity in cm/s
+          field_of_view: 82.6 # Width of camera field of view in degrees
+          disable_yaw: false # Whether to disable yaw rotation
+          disable_xy: false # Whether to disable forward/backward and left/right movement
+          disable_z: false # Whether to disable up/down movement
+        follow_distance: 100 # Distance to maintain from target in cm
+        follow_target_width: 0.3 # Width of target to maintain in proportion of frame width
+        follow_target_height: 0.9 # Where on the target's height to center
+        movement_threshold: 0.1 # In normalized coordinates [-1, 1]
+        delay_between_timed_yaws: 0.1 # Delay between timed yaws in seconds
+        percent_angle_to_command: 50 # Percentage of target angle to rotate in each yaw command [0, 100]
+        auto_takeoff: true # Whether to take off automatically without waiting for a target
+
+tello3:
+  type: controller
+  workers:
+    - video:
+        name: "video3"
+        source: "/tmp/vanishcap_recording_3.mp4" # Video file for offline playback
+        log_level: INFO # Show frame acquisition info
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["detector3", "drone3"] # Wait for detector and drone to start
+
+    - detector:
+        name: "detector3"
+        model: yolov8m # Base model path without extension
+        model_verbose: true
+        backend: tensorrt # Use TensorRT for performance
+        frame_skip: 1 # Process every frame
+        log_level: INFO # Show frame processing info
+        profile_window: 2.0 # Show max task time over last 2 seconds
+        depends_on: [] # No dependencies
+        events:
+          - video3: frame # Receive frame events from video
+
+    - navigator:
+        name: "navigator3"
+        target_class: "person" # Track people (class name)
+        log_level: INFO
+        profile_window: 1.5 # Show max task time over last 1.5 seconds
+        depends_on: ["detector3"] # Wait for detector to start
+        events:
+          - detector3: detection # Receive detection events from detector
+
+    - drone:
+        name: "drone3"
+        log_level: INFO
+        profile_window: 1.0 # Show max task time over last second
+        depends_on: ["navigator3"] # Wait for navigator to start
+        events:
+          - navigator3: target # Receive target events from navigator
+        driver:
+          log_level: INFO
+          name: "offline" # Use offline driver
+          max_linear_velocity: 50 # Maximum linear velocity in cm/s
+          max_angular_velocity: 50 # Maximum angular velocity in deg/s
+          max_vertical_velocity: 30 # Maximum vertical velocity in cm/s
+          field_of_view: 82.6 # Width of camera field of view in degrees
+          disable_yaw: false # Whether to disable yaw rotation
+          disable_xy: false # Whether to disable forward/backward and left/right movement
+          disable_z: false # Whether to disable up/down movement
+        follow_distance: 100 # Distance to maintain from target in cm
+        follow_target_width: 0.5 # Width of target to maintain in proportion of frame width
+        follow_target_height: 0.75 # Where on the target's height to center
+        movement_threshold: 0.1 # In normalized coordinates [-1, 1]
+        delay_between_timed_yaws: 0.1 # Delay between timed yaws in seconds
+        percent_angle_to_command: 50 # Percentage of target angle to rotate in each yaw command [0, 100]
+        auto_takeoff: true # Whether to take off automatically without waiting for a target
+
+ui:
+  name: "ui"
+  log_level: DEBUG # Show frame display info
+  profile_window: 1.0 # Show max task time over last second
+  depends_on: [] # No dependencies, can start anytime
+  events:
+    - video1: frame # Receive frame events from video
+    - detector1: detection # Receive detection events from detector
+    - video1: worker_profile # Receive profiling data from video worker
+    - detector1: worker_profile # Receive profiling data from detector worker
+    - navigator1: worker_profile # Receive profiling data from navigator worker
+    - video3: frame # Receive frame events from video
+    - detector3: detection # Receive detection events from detector
+    - video3: worker_profile # Receive profiling data from video worker
+    - detector3: worker_profile # Receive profiling data from detector worker
+    - navigator3: worker_profile # Receive profiling data from navigator worker
+    - ui: worker_profile # Receive profiling data from UI worker

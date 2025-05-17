@@ -80,8 +80,8 @@ class TestController(unittest.TestCase):
         controller = Controller(self.config_path)
         self._setup_mock_workers(controller)
         self.assertIsNotNone(controller)
-        self.assertEqual(controller.config["controller"]["log_level"], "DEBUG")
-        self.assertTrue(controller.config["controller"]["offline"])
+        self.assertEqual(controller.full_config["controller"]["log_level"], "DEBUG")
+        self.assertTrue(controller.full_config["controller"]["offline"])
         mock_init_workers.assert_called_once()
         mock_build_routes.assert_called_once()
 
@@ -99,8 +99,8 @@ class TestController(unittest.TestCase):
         mock_init_workers.assert_called_once()
         mock_build_routes.assert_called_once()
 
-        # Set up event routes manually for testing
-        controller.event_routes = {"test_event": {"test_worker"}}
+        # Set up event routes manually for testing - updated format
+        controller.event_routes = {("other_worker", "test_event"): {"test_worker"}}
 
         # Start the workers
         for worker in controller.workers.values():
@@ -168,7 +168,7 @@ class TestController(unittest.TestCase):
         """Test normal initialization."""
         with patch.object(Controller, "_init_workers"), patch.object(Controller, "_build_event_routes"):
             controller = Controller(self.config_path)
-            self.assertEqual(controller.config, self.config)
+            self.assertEqual(controller.full_config, self.config)
 
     def test_init_invalid_config(self):
         """Test initialization with invalid config."""

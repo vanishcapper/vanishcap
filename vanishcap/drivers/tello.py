@@ -27,6 +27,8 @@ class TelloDriver(BaseDroneDriver):
         self.state_port = 8890
         self.interface = config.get("interface")
 
+        self.logger.debug("Tello driver initialized with config: %s", config)
+
         # Socket connections
         self.command_socket: Optional[socket.socket] = None
         self.state_socket: Optional[socket.socket] = None
@@ -42,6 +44,7 @@ class TelloDriver(BaseDroneDriver):
             # Create command socket
             self.command_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             if self.interface:
+                self.logger.debug("Binding command socket to interface: %s", self.interface)
                 self.command_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, self.interface.encode())
             self.command_socket.bind(("", self.command_port))
             self.command_socket.settimeout(20.0)  # 5 second timeout

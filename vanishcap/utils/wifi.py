@@ -2,6 +2,7 @@
 
 import subprocess
 import time
+import re  # Import re for parsing ip command output
 from typing import Any, Dict, Optional, Tuple
 
 from vanishcap.utils.logging import get_worker_logger
@@ -89,7 +90,7 @@ class WifiManager:
         try:
             self.logger.warning("Scanning for WiFi networks...")
             subprocess.run(
-                ["nmcli", "device", "wifi", "list", "--rescan", "yes"],
+                ["nmcli", "device", "wifi", "list", "ifname", self.wifi_device, "--rescan", "yes"],
                 check=True,
             )
             self.logger.info("WiFi scan completed successfully")
@@ -241,6 +242,16 @@ class WifiManager:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Exit context manager."""
-        if self.previous_wifi and self.previous_wifi[0] != self.get_current_wifi()[0]:
-            self.logger.info("Reconnecting to previous WiFi network")
-            self.connect(self.previous_wifi[0])
+        # Corrected logic: Only reconnect if reconnect=true was set AND we stored a previous network
+        if self.config.get("reconnect", False) and self.previous_wifi:
+            current_wifi = self.get_current_wifi()
+            # Only reconnect if not currently connected to the desired previous network
+            if not current_wifi or current_wifi[0] != self.previous_wifi[0]:
+                self.logger.info("Reconnecting to previous WiFi network as configured")
+                self.connect(
+                    self.previous_wifi[0]
+                )  # Assuming previous network didn't need password or handled by nmcli
+            else:
+                self.logger.info("Already connected to the intended previous network.")
+        else:
+            self.logger.info("Skipping reconnection to previous WiFi based on config or lack of stored network.")
