@@ -20,7 +20,9 @@ build/
 *.swo
 
 # PyTorch model files
-assets
+*.pt
+*.engine
+*.onnx
 
 video
 

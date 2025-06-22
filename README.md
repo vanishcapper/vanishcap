@@ -2,6 +2,8 @@
 
 Autonomous UAV software to act as a partner when you'd rather not be seen. See [here](https://mario.fandom.com/wiki/Vanish_Cap) for the origin story.
 
+![Vanishimation](assets/vanishcap_loading.gif)
+
 ## Installation
 
 To install in development mode:
